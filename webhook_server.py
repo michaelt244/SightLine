@@ -4,6 +4,7 @@ import asyncio
 import base64
 import io
 import os
+import re
 import time
 from typing import Optional
 
@@ -44,6 +45,73 @@ PROMPTS = {
 }
 
 app = FastAPI(title="SightLine Webhook", version="2.0")
+
+
+def _iter_strings(value):
+    """Yield all string leaves from nested dict/list payloads."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _iter_strings(v)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_strings(item)
+
+
+def _extract_command(body: dict) -> Optional[str]:
+    """Find on/off command from structured params or free-form text."""
+    direct = (
+        body.get("command")
+        or body.get("parameters", {}).get("command")
+        or body.get("tool_call", {}).get("parameters", {}).get("command")
+    )
+    if isinstance(direct, str):
+        cmd = direct.strip().lower()
+        if cmd in {"on", "off"}:
+            return cmd
+
+    all_text = " ".join(s.lower() for s in _iter_strings(body))
+    normalized = re.sub(r"\s+", " ", all_text).strip()
+    if not normalized:
+        return None
+
+    # Prefer explicit phrases to avoid accidental toggles.
+    off_patterns = (
+        "sightline turn off",
+        "turn sightline off",
+        "turn off sightline",
+        "sightline off",
+        "stop sightline",
+        "pause sightline",
+    )
+    on_patterns = (
+        "sightline turn on",
+        "turn sightline on",
+        "turn on sightline",
+        "sightline on",
+        "resume sightline",
+        "start sightline",
+    )
+
+    if any(p in normalized for p in off_patterns):
+        return "off"
+    if any(p in normalized for p in on_patterns):
+        return "on"
+    return None
+
+
+def _apply_control(command: str, source: str) -> str:
+    global sightline_active
+    if command == "off":
+        sightline_active = False
+        print(f"[CONTROL:{source}] SightLine paused")
+        return "SightLine paused"
+    if command == "on":
+        sightline_active = True
+        print(f"[CONTROL:{source}] SightLine resumed")
+        return "SightLine resumed"
+    return f"Unknown command: {command}"
 
 
 @app.post("/upload-frame")
@@ -98,18 +166,11 @@ async def _run_vision(b64: str, prompt: str) -> str:
 
 @app.post("/tools/control")
 async def control(request: Request):
-    global sightline_active
-    body    = await request.json()
-    command = body.get("command", "").lower()
-    if command == "off":
-        sightline_active = False
-        print("[CONTROL] SightLine paused")
-        return JSONResponse({"result": "SightLine paused"})
-    if command == "on":
-        sightline_active = True
-        print("[CONTROL] SightLine resumed")
-        return JSONResponse({"result": "SightLine resumed"})
-    return JSONResponse({"result": f"Unknown command: {command}"}, status_code=400)
+    body = await request.json()
+    command = _extract_command(body)
+    if command in {"on", "off"}:
+        return JSONResponse({"result": _apply_control(command, source="tool")})
+    return JSONResponse({"result": "Unknown command. Use on or off."}, status_code=400)
 
 
 @app.get("/tools/status")
@@ -119,10 +180,13 @@ async def status():
 
 @app.post("/tools/describe_scene")
 async def handle_describe_scene(request: Request):
-    if not sightline_active:
-        return JSONResponse({"result": "SightLine is currently paused. Say turn on to resume."})
-
     body = await request.json()
+    command = _extract_command(body)
+    if command in {"on", "off"}:
+        return JSONResponse({"result": _apply_control(command, source="describe_scene")})
+
+    if not sightline_active:
+        return JSONResponse({"result": "SightLine is currently paused. Say SightLine turn on to resume."})
 
     # ElevenLabs places parameters at different paths depending on SDK version
     mode = (
@@ -162,6 +226,7 @@ if __name__ == "__main__":
     print()
     print("  Laptop uploads frames to:  POST http://165.245.140.111:8081/upload-frame")
     print("  ElevenLabs calls:          POST http://<ngrok-url>/tools/describe_scene")
+    print("  Control endpoint:          POST http://<ngrok-url>/tools/control")
     print()
 
     if not GEMINI_API_KEY:

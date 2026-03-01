@@ -27,6 +27,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+WEBHOOK_UPLOAD_URL = os.getenv("WEBHOOK_UPLOAD_URL", "").strip()
 
 VOICE_ID      = "21m00Tcm4TlvDq8ikWAM"  # Rachel
 TTS_MODEL     = "eleven_turbo_v2_5"
@@ -269,6 +270,13 @@ async def get_status():
         "latency_ms":      state["last_latency_ms"],
         "focus_mode":      state["focus_mode"],
         "uptime_seconds":  round(time.time() - start_time, 1),
+    })
+
+
+@app.get("/api/config")
+async def get_config():
+    return JSONResponse({
+        "webhook_upload_url": WEBHOOK_UPLOAD_URL or None,
     })
 
 

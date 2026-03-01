@@ -8,7 +8,7 @@ import sys
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 AGENT_ID           = "agent_7901kjkkm9jpesna15bwehhwtjr6"
 
-TOOL_DEFINITION = {
+DESCRIBE_TOOL_DEFINITION = {
     "type": "webhook",
     "name": "describe_scene",
     "description": (
@@ -34,10 +34,48 @@ TOOL_DEFINITION = {
     },
 }
 
+CONTROL_TOOL_DEFINITION = {
+    "type": "webhook",
+    "name": "control_sightline",
+    "description": (
+        "Turns SightLine on or off. Call this when the user says things like "
+        "'SightLine turn off', 'pause SightLine', or 'turn SightLine on'."
+    ),
+    "api": {"method": "POST"},
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "enum": ["on", "off"],
+                "description": "Use 'off' to pause scene descriptions, 'on' to resume.",
+            }
+        },
+        "required": ["command"],
+    },
+}
+
+
+def build_tools(webhook_url: str):
+    url = webhook_url.rstrip("/")
+    if url.endswith("/tools/describe_scene"):
+        base = url[: -len("/tools/describe_scene")]
+        describe_url = url
+    elif url.endswith("/tools/control"):
+        base = url[: -len("/tools/control")]
+        describe_url = f"{base}/tools/describe_scene"
+    else:
+        base = url
+        describe_url = f"{base}/tools/describe_scene"
+    control_url = f"{base}/tools/control"
+
+    describe_tool = {**DESCRIBE_TOOL_DEFINITION, "api": {"url": describe_url, "method": "POST"}}
+    control_tool = {**CONTROL_TOOL_DEFINITION, "api": {"url": control_url, "method": "POST"}}
+    return [describe_tool, control_tool]
+
 
 def print_curl(webhook_url: str):
-    tool = {**TOOL_DEFINITION, "api": {"url": webhook_url, "method": "POST"}}
-    body = {"tools": [tool]}
+    body = {"tools": build_tools(webhook_url)}
     print()
     print(f"curl -s -X PATCH \\")
     print(f"  https://api.elevenlabs.io/v1/convai/agents/{AGENT_ID} \\")
@@ -51,8 +89,7 @@ def register_via_sdk(webhook_url: str) -> bool:
     try:
         from elevenlabs.client import ElevenLabs
         client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        tool   = {**TOOL_DEFINITION, "api": {"url": webhook_url, "method": "POST"}}
-        client.conversational_ai.agents.update(agent_id=AGENT_ID, tools=[tool])
+        client.conversational_ai.agents.update(agent_id=AGENT_ID, tools=build_tools(webhook_url))
         print(f"✅ Registered on agent {AGENT_ID}")
         return True
     except AttributeError:
@@ -65,11 +102,10 @@ def register_via_sdk(webhook_url: str) -> bool:
 def register_via_rest(webhook_url: str) -> bool:
     import httpx
 
-    tool = {**TOOL_DEFINITION, "api": {"url": webhook_url, "method": "POST"}}
     resp = httpx.patch(
         f"https://api.elevenlabs.io/v1/convai/agents/{AGENT_ID}",
         headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-        json={"tools": [tool]},
+        json={"tools": build_tools(webhook_url)},
         timeout=15.0,
     )
     if resp.status_code in (200, 204):
@@ -81,7 +117,10 @@ def register_via_rest(webhook_url: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Register describe_scene on the SightLine ElevenLabs agent")
-    parser.add_argument("--webhook-url", help="Public webhook URL (e.g. https://abc.ngrok-free.app/tools/describe_scene)")
+    parser.add_argument(
+        "--webhook-url",
+        help="Public webhook URL base or describe endpoint (e.g. https://abc.ngrok-free.app/tools/describe_scene)",
+    )
     parser.add_argument("--print-curl",  action="store_true", help="Print the equivalent curl command")
     args = parser.parse_args()
 
@@ -108,8 +147,10 @@ def main():
         if not register_via_rest(args.webhook_url):
             print()
             print("Manual fallback — add in ElevenLabs dashboard:")
-            print("  Agents → Your Agent → Tools → Add Tool → Webhook")
-            print(f"  Name: describe_scene  |  URL: {args.webhook_url}  |  Method: POST")
+            tools = build_tools(args.webhook_url)
+            print("  Agents → Your Agent → Tools → Add Tool → Webhook (add both)")
+            print(f"  Name: describe_scene    |  URL: {tools[0]['api']['url']}  |  Method: POST")
+            print(f"  Name: control_sightline |  URL: {tools[1]['api']['url']}  |  Method: POST")
             print()
             print_curl(args.webhook_url)
             sys.exit(1)
