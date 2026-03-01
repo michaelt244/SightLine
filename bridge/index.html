@@ -2,403 +2,717 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>SightLine Bridge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CallMirror Live</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #0a0a0a;
-      color: #f0f0f0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100dvh;
-      padding: 24px 16px;
-      gap: 20px;
+    @font-face {
+      font-family: "Konstanz Regular";
+      src: local("Konstanz Regular"), local("Konstanz");
+      font-style: normal;
+      font-weight: 400;
     }
 
-    header { text-align: center; }
-    h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
-    h1 span { color: #6ee7b7; }
-    .subtitle { font-size: 0.85rem; color: #888; margin-top: 4px; }
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: rgba(255, 255, 255, 0.9);
+      --ink: #1b1b1b;
+      --muted: #666f7d;
+      --line: rgba(228, 216, 201, 0.9);
+      --brand: #ff6b1f;
+      --brand-hover: #e85f1a;
+      --ok: #19a44b;
+      --warn: #f59e0b;
+      --danger: #d94828;
+      --shadow-soft: 0 16px 34px rgba(20, 18, 14, 0.08);
+      --shadow-deep: 0 26px 70px rgba(20, 18, 14, 0.14);
+    }
 
-    /* Status badge */
-    #status {
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: "Konstanz Regular", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 7% 10%, #ffe9d9 0%, transparent 32%),
+        radial-gradient(circle at 92% 12%, #f5eadf 0%, transparent 28%),
+        var(--bg);
+      padding: 18px;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.18;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.035) 0, rgba(0, 0, 0, 0.035) 1px, transparent 1px, transparent 3px),
+        repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.02) 0, rgba(0, 0, 0, 0.02) 1px, transparent 1px, transparent 4px);
+    }
+
+    .shell {
+      width: min(1280px, 100%);
+      height: calc(100vh - 36px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(290px, 372px) minmax(340px, 1fr);
+      gap: 18px;
+      overflow: hidden;
+      animation: fade-up 380ms ease;
+    }
+
+    .panel,
+    .stage {
+      min-height: 0;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-deep);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::after,
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+    }
+
+    .panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.56rem;
+      letter-spacing: -0.24px;
+      font-weight: 400;
+      line-height: 1.08;
+    }
+
+    .status {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(228, 216, 201, 0.95);
+      background: var(--surface-strong);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .status-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .live-pill {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
       border-radius: 999px;
-      padding: 6px 16px;
-      font-size: 0.8rem;
+      border: 1px solid rgba(223, 212, 197, 0.95);
+      background: #fff;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      color: #4f5660;
+      font-weight: 400;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
     }
-    .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #555;
-      transition: background 0.3s;
-    }
-    .dot.connected { background: #6ee7b7; }
-    .dot.error     { background: #f87171; }
 
-    /* Description card */
-    #description-card {
-      width: 100%;
-      max-width: 480px;
-      background: #141414;
-      border: 1px solid #222;
-      border-radius: 16px;
-      padding: 20px;
-      min-height: 120px;
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #abb2be;
+      transition: background 160ms ease, box-shadow 160ms ease;
     }
-    #description-text {
-      font-size: 1.05rem;
-      line-height: 1.6;
-      color: #e5e7eb;
+
+    .live-pill.on {
+      border-color: #bae7c8;
+      background: #f3fbf6;
+      color: #117939;
     }
-    #safety-alerts {
-      margin-top: 12px;
-      display: flex;
-      flex-wrap: wrap;
+
+    .live-pill.on .dot {
+      background: var(--ok);
+      box-shadow: 0 0 0 5px rgba(25, 164, 75, 0.15);
+    }
+
+    .stream-meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
-    .alert-badge {
-      background: #7f1d1d;
-      color: #fca5a5;
-      border-radius: 999px;
-      padding: 3px 12px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+
+    .metric {
+      border: 1px solid rgba(226, 214, 198, 0.95);
+      border-radius: 12px;
+      padding: 7px 8px;
+      background: rgba(255, 255, 255, 0.76);
+      display: grid;
+      gap: 3px;
+      min-height: 52px;
     }
 
-    /* Controls */
-    .controls {
-      width: 100%;
-      max-width: 480px;
+    .metric-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #8a919d;
+      line-height: 1;
+    }
+
+    .metric-value {
+      font-size: 0.88rem;
+      color: #29303a;
+      line-height: 1.1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .metric-value.health-good {
+      color: #0f7a39;
+    }
+
+    .metric-value.health-warn {
+      color: #9a6700;
+    }
+
+    .metric-value.health-idle {
+      color: #6b7280;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 11px 13px;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 400;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      filter: brightness(0.98);
+    }
+
+    button:active {
+      transform: translateY(1px) scale(0.995);
+    }
+
+    #start-btn {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    #start-btn:hover {
+      background: var(--brand-hover);
+    }
+
+    #stop-btn {
+      min-width: 96px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--danger);
+      border-color: #f5c8b8;
+    }
+
+    #stop-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .log {
+      flex: 1;
+      min-height: 0;
+      border-radius: 14px;
+      border: 1px solid #20242a;
+      background: #101318;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
-    /* Mode selector */
-    .mode-row {
-      display: flex;
+    .log h2 {
+      margin: 0;
+      padding: 10px 12px;
+      color: #d2dae6;
+      font-size: 0.74rem;
+      letter-spacing: 0.75px;
+      text-transform: uppercase;
+      font-weight: 400;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    #logs {
+      margin: 0;
+      padding: 8px 12px 12px;
+      list-style: none;
+      overflow: auto;
+      min-height: 0;
+      display: grid;
+      gap: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.74rem;
+      line-height: 1.35;
+      color: #e5edf8;
+    }
+
+    #logs li {
+      display: grid;
+      grid-template-columns: auto 1fr;
       gap: 8px;
-      flex-wrap: wrap;
-    }
-    .mode-btn {
-      flex: 1;
-      min-width: 70px;
-      padding: 8px 4px;
-      border-radius: 10px;
-      border: 1px solid #333;
-      background: #1a1a1a;
-      color: #aaa;
-      font-size: 0.78rem;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.2s;
-    }
-    .mode-btn.active {
-      border-color: #6ee7b7;
-      color: #6ee7b7;
-      background: #0d2b22;
     }
 
-    /* Camera / mic buttons */
-    .btn-row {
-      display: flex;
-      gap: 12px;
+    #logs .time {
+      color: #8fb5f8;
+      white-space: nowrap;
     }
-    button.primary {
-      flex: 1;
+
+    .stage {
+      height: 100%;
+      display: grid;
+      place-items: center;
       padding: 16px;
-      border-radius: 14px;
-      border: none;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
+      animation: fade-up 420ms ease;
     }
-    button.primary:active { transform: scale(0.97); }
-    button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    #btn-snap   { background: #6ee7b7; color: #0a0a0a; }
-    #btn-ask    { background: #818cf8; color: #fff; }
-    #btn-stream { background: #1a1a1a; border: 1px solid #333; color: #aaa; font-size: 0.85rem; }
-
-    /* Q&A input */
-    .qa-row {
-      display: flex;
-      gap: 8px;
+    .phone {
+      width: min(400px, calc((100vh - 106px) * 0.4615), calc(100% - 10px));
+      aspect-ratio: 9 / 19.5;
+      border-radius: 46px;
+      padding: 12px;
+      background: linear-gradient(150deg, #1c1c1d 0%, #080808 100%);
+      box-shadow: 0 34px 88px rgba(0, 0, 0, 0.45);
+      position: relative;
+      flex-shrink: 0;
+      overflow: hidden;
     }
-    #question-input {
-      flex: 1;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid #333;
-      background: #1a1a1a;
-      color: #f0f0f0;
-      font-size: 0.95rem;
-      outline: none;
-    }
-    #question-input:focus { border-color: #818cf8; }
 
-    /* Log */
-    #log {
+    .phone::before {
+      content: "";
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 34%;
+      height: 22px;
+      border-radius: 999px;
+      background: #010101;
+      z-index: 4;
+    }
+
+    .phone::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background: linear-gradient(170deg, rgba(255, 255, 255, 0.2) 0%, transparent 36%);
+      opacity: 0.28;
+    }
+
+    .screen {
       width: 100%;
-      max-width: 480px;
-      background: #0d0d0d;
-      border: 1px solid #1e1e1e;
-      border-radius: 12px;
-      padding: 12px 14px;
-      font-family: monospace;
-      font-size: 0.75rem;
-      color: #555;
-      max-height: 120px;
-      overflow-y: auto;
+      height: 100%;
+      border-radius: 34px;
+      overflow: hidden;
+      position: relative;
+      background: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.14);
     }
 
-    /* Hidden video/canvas for camera capture */
-    #camera-video, #camera-canvas { display: none; }
+    #video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 58%;
+      transform: translate(-50%, -50%) scale(1.18);
+      transform-origin: center;
+      background: #fff;
+      opacity: 0;
+      transition: opacity 220ms ease;
+    }
+
+    .screen.live #video {
+      opacity: 1;
+    }
+
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #66707e;
+      font-size: 0.88rem;
+      line-height: 1.35;
+      background:
+        linear-gradient(180deg, rgba(255, 251, 245, 0.88), rgba(255, 255, 255, 0.95)),
+        repeating-linear-gradient(
+          -45deg,
+          rgba(203, 213, 225, 0.17),
+          rgba(203, 213, 225, 0.17) 12px,
+          rgba(255, 255, 255, 0.2) 12px,
+          rgba(255, 255, 255, 0.2) 24px
+        );
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+
+    .placeholder-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid rgba(229, 217, 201, 0.95);
+      background: rgba(255, 255, 255, 0.86);
+      display: grid;
+      place-items: center;
+      color: #9aa3b2;
+      font-size: 1rem;
+    }
+
+    .screen.live .placeholder {
+      opacity: 0;
+      transform: scale(1.012);
+      pointer-events: none;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: grid;
+      gap: 8px;
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    .toast {
+      min-width: 220px;
+      max-width: 320px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow-soft);
+      color: #1f2937;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.success {
+      border-color: rgba(25, 164, 75, 0.35);
+      color: #0f6f33;
+    }
+
+    .toast.warn {
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #8a5a00;
+    }
+
+    .toast.error {
+      border-color: rgba(217, 72, 40, 0.35);
+      color: #9f2b13;
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 980px) {
+      body {
+        padding: 12px;
+      }
+
+      .shell {
+        height: calc(100vh - 24px);
+        grid-template-columns: minmax(230px, 310px) 1fr;
+        gap: 12px;
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .phone {
+        width: min(360px, calc((100vh - 76px) * 0.4615), calc(100% - 8px));
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+
+      .toast-stack {
+        right: 12px;
+        bottom: 12px;
+      }
+    }
   </style>
 </head>
 <body>
+  <main class="shell">
+    <section class="panel">
+      <h1>CallMirror</h1>
 
-  <header>
-    <h1>Sight<span>Line</span></h1>
-    <p class="subtitle">AI eyes for Meta glasses</p>
-  </header>
+      <section class="status">
+        <div class="status-top">
+          <div class="live-pill" id="live-pill">
+            <span class="dot"></span>
+            <span id="live-text">Idle</span>
+          </div>
+          <span class="stream-meta" id="stream-meta">No source selected</span>
+        </div>
 
-  <div id="status">
-    <span class="dot" id="dot"></span>
-    <span id="status-text">Connecting...</span>
-  </div>
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Resolution</span>
+            <span class="metric-value" id="metric-res">-</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">FPS</span>
+            <span class="metric-value" id="metric-fps">-</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Health</span>
+            <span class="metric-value health-idle" id="metric-health">idle</span>
+          </div>
+        </div>
+      </section>
 
-  <!-- Latest description -->
-  <div id="description-card">
-    <p id="description-text">Waiting for first frame...</p>
-    <div id="safety-alerts"></div>
-  </div>
+      <div class="actions">
+        <button id="start-btn">Start / Reselect</button>
+        <button id="stop-btn" disabled>Stop</button>
+      </div>
 
-  <div class="controls">
-    <!-- Mode selector -->
-    <div class="mode-row">
-      <div class="mode-btn active" data-mode="general">General</div>
-      <div class="mode-btn" data-mode="safety">Safety</div>
-      <div class="mode-btn" data-mode="navigation">Navigate</div>
-      <div class="mode-btn" data-mode="ocr">Read text</div>
-    </div>
+      <section class="log">
+        <h2>Runtime Log</h2>
+        <ul id="logs"></ul>
+      </section>
+    </section>
 
-    <!-- Primary actions -->
-    <div class="btn-row">
-      <button class="primary" id="btn-snap">📸 Describe now</button>
-      <button class="primary" id="btn-stream">▶ Auto stream</button>
-    </div>
+    <section class="stage">
+      <div class="phone" aria-label="Phone preview window">
+        <div class="screen" id="screen">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="placeholder" id="placeholder">
+            <div class="placeholder-mark">+</div>
+            <div>Select a source to start preview</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
-    <!-- Q&A -->
-    <div class="qa-row">
-      <input type="text" id="question-input" placeholder="Ask a question about the scene..." />
-      <button class="primary" id="btn-ask" style="flex:0;padding:12px 18px">Ask</button>
-    </div>
-  </div>
-
-  <!-- Debug log -->
-  <div id="log">— log —</div>
-
-  <!-- Hidden camera elements -->
-  <video id="camera-video" autoplay playsinline muted></video>
-  <canvas id="camera-canvas"></canvas>
-
-  <audio id="audio-player" autoplay></audio>
+  <div class="toast-stack" id="toast-stack"></div>
 
   <script>
-    // ── Config ────────────────────────────────────────────────────────────────
-    const BACKEND_WS  = `ws://${location.host}/ws/stream`;
-    const BACKEND_HTTP = `http://${location.host}`;
+    const video = document.getElementById('video');
+    const screen = document.getElementById('screen');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const livePill = document.getElementById('live-pill');
+    const liveText = document.getElementById('live-text');
+    const streamMeta = document.getElementById('stream-meta');
+    const logsEl = document.getElementById('logs');
+    const toastStack = document.getElementById('toast-stack');
 
-    // ── State ─────────────────────────────────────────────────────────────────
-    let ws = null;
-    let mode = 'general';
-    let streaming = false;
-    let streamTimer = null;
-    let cameraStream = null;
-    let lastImageB64 = null;
+    const metricRes = document.getElementById('metric-res');
+    const metricFps = document.getElementById('metric-fps');
+    const metricHealth = document.getElementById('metric-health');
 
-    // ── DOM refs ──────────────────────────────────────────────────────────────
-    const dot            = document.getElementById('dot');
-    const statusText     = document.getElementById('status-text');
-    const descText       = document.getElementById('description-text');
-    const alertsEl       = document.getElementById('safety-alerts');
-    const logEl          = document.getElementById('log');
-    const btnSnap        = document.getElementById('btn-snap');
-    const btnStream      = document.getElementById('btn-stream');
-    const btnAsk         = document.getElementById('btn-ask');
-    const questionInput  = document.getElementById('question-input');
-    const video          = document.getElementById('camera-video');
-    const canvas         = document.getElementById('camera-canvas');
-    const audioPlayer    = document.getElementById('audio-player');
+    const FIXED_FRAMING = {
+      zoom: 1.18,
+      x: 50,
+      y: 58
+    };
 
-    // ── Logging ───────────────────────────────────────────────────────────────
-    function log(msg) {
-      const line = document.createElement('div');
-      line.textContent = `${new Date().toLocaleTimeString()} ${msg}`;
-      logEl.appendChild(line);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
+    let activeStream = null;
 
-    // ── WebSocket ─────────────────────────────────────────────────────────────
-    function connectWS() {
-      ws = new WebSocket(BACKEND_WS);
+    function log(message) {
+      const item = document.createElement('li');
+      const time = new Date().toLocaleTimeString([], { hour12: false });
+      item.innerHTML = `<span class="time">${time}</span><span>${message}</span>`;
+      logsEl.prepend(item);
 
-      ws.onopen = () => {
-        dot.className = 'dot connected';
-        statusText.textContent = 'Connected';
-        log('WebSocket connected');
-      };
-
-      ws.onclose = () => {
-        dot.className = 'dot error';
-        statusText.textContent = 'Disconnected — retrying in 3s';
-        log('WebSocket closed, reconnecting...');
-        setTimeout(connectWS, 3000);
-      };
-
-      ws.onerror = (e) => {
-        log('WebSocket error');
-      };
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'description') {
-          descText.textContent = msg.text;
-          renderAlerts(msg.safety_alerts || []);
-          log(`Description received (${msg.text.length} chars)`);
-          speakText(msg.text);
-        } else if (msg.type === 'answer') {
-          descText.textContent = msg.text;
-          log(`Answer: ${msg.text.substring(0, 60)}...`);
-          speakText(msg.text);
-        } else if (msg.type === 'error') {
-          log(`Error: ${msg.message}`);
-        }
-      };
-    }
-
-    function renderAlerts(alerts) {
-      alertsEl.innerHTML = '';
-      alerts.forEach(a => {
-        const badge = document.createElement('span');
-        badge.className = 'alert-badge';
-        badge.textContent = a.replace(/_/g, ' ');
-        alertsEl.appendChild(badge);
-      });
-    }
-
-    // ── Camera ────────────────────────────────────────────────────────────────
-    async function startCamera() {
-      try {
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 640 } },
-          audio: false,
-        });
-        video.srcObject = cameraStream;
-        await video.play();
-        log('Camera started (rear lens)');
-      } catch (e) {
-        log(`Camera error: ${e.message}`);
+      if (logsEl.children.length > 120) {
+        logsEl.removeChild(logsEl.lastElementChild);
       }
     }
 
-    function captureFrame() {
-      if (!video.videoWidth) return null;
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      // Return base64 JPEG (strip data URL prefix)
-      return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    function showToast(message, type = 'default') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      toastStack.prepend(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.add('show');
+      });
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 220);
+      }, 2600);
     }
 
-    // ── Send frame via WS ─────────────────────────────────────────────────────
-    function sendFrame(b64) {
-      if (!ws || ws.readyState !== WebSocket.OPEN) { log('WS not open'); return; }
-      lastImageB64 = b64;
-      ws.send(JSON.stringify({ type: 'frame', image: b64, mode }));
-    }
+    function setMetrics({ width = '-', height = '-', fps = '-', health = 'idle' } = {}) {
+      metricRes.textContent = width === '-' || height === '-' ? '-' : `${width}x${height}`;
+      metricFps.textContent = fps === '-' ? '-' : `${fps}`;
+      metricHealth.textContent = health;
 
-    // ── Snap button ───────────────────────────────────────────────────────────
-    btnSnap.addEventListener('click', async () => {
-      const b64 = captureFrame();
-      if (!b64) { log('No camera frame available'); return; }
-      sendFrame(b64);
-      log('Frame sent');
-    });
-
-    // ── Auto stream toggle ────────────────────────────────────────────────────
-    btnStream.addEventListener('click', () => {
-      streaming = !streaming;
-      if (streaming) {
-        btnStream.textContent = '⏹ Stop stream';
-        btnStream.style.borderColor = '#6ee7b7';
-        streamTimer = setInterval(() => {
-          const b64 = captureFrame();
-          if (b64) sendFrame(b64);
-        }, 2500);
-        log('Auto stream started (every 2.5s)');
+      metricHealth.classList.remove('health-good', 'health-warn', 'health-idle');
+      if (health === 'good') {
+        metricHealth.classList.add('health-good');
+      } else if (health === 'warn') {
+        metricHealth.classList.add('health-warn');
       } else {
-        btnStream.textContent = '▶ Auto stream';
-        btnStream.style.borderColor = '#333';
-        clearInterval(streamTimer);
-        log('Auto stream stopped');
+        metricHealth.classList.add('health-idle');
       }
-    });
-
-    // ── Ask button ────────────────────────────────────────────────────────────
-    btnAsk.addEventListener('click', () => {
-      const question = questionInput.value.trim();
-      if (!question) return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) { log('WS not open'); return; }
-      ws.send(JSON.stringify({ type: 'question', text: question }));
-      log(`Question sent: ${question}`);
-      questionInput.value = '';
-    });
-
-    questionInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') btnAsk.click();
-    });
-
-    // ── Mode buttons ──────────────────────────────────────────────────────────
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        mode = btn.dataset.mode;
-        log(`Mode: ${mode}`);
-      });
-    });
-
-    // ── TTS via Web Speech API (fallback when ElevenLabs audio not streamed) ──
-    function speakText(text) {
-      if (!('speechSynthesis' in window)) return;
-      // Only use browser TTS if audio player has no src (ElevenLabs not wired up)
-      if (audioPlayer.src) return;
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.rate = 1.05;
-      utt.pitch = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utt);
     }
 
-    // ── Boot ──────────────────────────────────────────────────────────────────
-    connectWS();
-    startCamera();
-    log('SightLine bridge ready');
+    function applyFixedFraming() {
+      video.style.transform = `translate(-50%, -50%) scale(${FIXED_FRAMING.zoom})`;
+      video.style.objectPosition = `${FIXED_FRAMING.x}% ${FIXED_FRAMING.y}%`;
+    }
+
+    function setLiveState(isLive) {
+      livePill.classList.toggle('on', isLive);
+      liveText.textContent = isLive ? 'Live' : 'Idle';
+      screen.classList.toggle('live', isLive);
+      stopBtn.disabled = !isLive;
+    }
+
+    function stopCurrentStream({ silent = false } = {}) {
+      if (!activeStream) return;
+
+      activeStream.getTracks().forEach((track) => track.stop());
+      activeStream = null;
+
+      video.srcObject = null;
+      setLiveState(false);
+      streamMeta.textContent = 'No source selected';
+      setMetrics({ health: 'idle' });
+
+      if (!silent) {
+        log('Stream stopped');
+        showToast('Stream stopped', 'warn');
+      }
+    }
+
+    async function startLiveOutput() {
+      try {
+        stopCurrentStream({ silent: true });
+
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+
+        activeStream = stream;
+        video.srcObject = stream;
+        applyFixedFraming();
+        setLiveState(true);
+
+        const [track] = stream.getVideoTracks();
+        const settings = track ? track.getSettings() : {};
+        const width = settings.width || '?';
+        const height = settings.height || '?';
+        const fps = settings.frameRate ? Math.round(settings.frameRate) : '?';
+
+        streamMeta.textContent = `${width}x${height} @ ${fps}fps`;
+
+        const health = fps !== '?' && fps < 20 ? 'warn' : 'good';
+        setMetrics({ width, height, fps, health });
+
+        log(`Source active (${width}x${height} @ ${fps}fps)`);
+        showToast('Source connected', 'success');
+
+        if (track) {
+          track.addEventListener('ended', () => {
+            stopCurrentStream({ silent: true });
+            log('Capture ended by browser or user');
+            showToast('Capture ended', 'warn');
+          });
+        }
+      } catch (error) {
+        setLiveState(false);
+        streamMeta.textContent = 'No source selected';
+        setMetrics({ health: 'idle' });
+        log(`Start failed: ${error.message}`);
+        showToast('Permission or source selection failed', 'error');
+      }
+    }
+
+    startBtn.addEventListener('click', startLiveOutput);
+    stopBtn.addEventListener('click', () => stopCurrentStream());
+
+    applyFixedFraming();
+    setMetrics({ health: 'idle' });
+    log('UI ready.');
   </script>
 </body>
 </html>
