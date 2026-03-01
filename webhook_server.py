@@ -9,9 +9,12 @@ import time
 from typing import Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # vLLM runs on the same machine, so we call localhost
@@ -45,6 +48,13 @@ PROMPTS = {
 }
 
 app = FastAPI(title="SightLine Webhook", version="2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _iter_strings(value):
@@ -146,13 +156,18 @@ async def _call_amd(b64: str, prompt: str) -> str:
 
 
 def _call_gemini(b64: str, prompt: str) -> str:
-    import google.generativeai as genai
+    import google.genai as genai
+    from google.genai import types
     from PIL import Image
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model  = genai.GenerativeModel("gemini-2.0-flash")
+    client = genai.Client(api_key=GEMINI_API_KEY)
     image  = Image.open(io.BytesIO(base64.b64decode(b64)))
-    return model.generate_content([prompt, image]).text.strip()
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[prompt, image],
+        config=types.GenerateContentConfig(max_output_tokens=60, temperature=0.2),
+    )
+    return response.text.strip()
 
 
 async def _run_vision(b64: str, prompt: str) -> str:

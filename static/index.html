@@ -1432,22 +1432,18 @@
       if (voiceMode) return;
       voiceMode = true;
       setVoiceUi(true);
-      try {
-        await ensureMicAccess();
-
-        const pauseResp = await fetch(`${API_BASE}/api/pause`, { method: 'POST' });
-        if (!pauseResp.ok) throw new Error('Failed to pause auto-detect mode');
-
-        await startConvaiCall();
-        localLog('Voice command mode — auto paused');
-      } catch (error) {
-        voiceMode = false;
-        setVoiceUi(false);
-        try { await fetch(`${API_BASE}/api/resume`, { method: 'POST' }); } catch {}
-        const message = (error && error.message) ? error.message : 'Unknown voice startup error';
-        localLog(`Voice mode failed: ${message}`, 'error');
-        showToast(message, 'error');
+      try { await ensureMicAccess(); } catch (e) {
+        localLog(`Mic: ${e.message}`, 'error');
       }
+      try { await fetch(`${API_BASE}/api/pause`, { method: 'POST' }); } catch {}
+      try {
+        await startConvaiCall();
+      } catch {
+        // Auto-click failed — widget still visible, user can click Start manually
+        localLog('Voice mode active — click Start in the widget to begin', 'system');
+        showToast('Click the Start button in the Voice Agent panel', 'warn');
+      }
+      localLog('Voice command mode — auto paused');
     }
 
     async function exitVoiceMode() {
