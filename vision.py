@@ -13,29 +13,31 @@ AMD_TIMEOUT  = 15.0
 
 PROMPTS = {
     "general": (
-        "You assist a blind person. Describe ONLY physical objects and distances in ONE sentence, max 10 words. "
-        "Format: 'Object ahead, object on left, distance.' NEVER mention screens, webpages, images, or photos."
+        "You assist a blind person. Describe ONLY physical objects and distances in 1-2 short sentences, max 28 words. "
+        "Prioritize immediate obstacles and spatial direction (ahead/left/right). "
+        "NEVER mention screens, webpages, images, or photos."
     ),
     "safety": (
-        "Blind person safety check. Max 8 words. If safe say 'Path clear.' "
-        "If hazard say 'Hazard: description.' NOTHING else."
+        "Blind person safety check. Use up to 22 words. "
+        "If safe, say path is clear. If hazard, name hazard type and where it is."
     ),
     "ocr": (
-        "Read ONLY visible text. Max 10 words. Format: 'Text: exact words here.'"
+        "Read only visible text exactly as written. Use up to 30 words."
     ),
     "navigation": (
-        "Blind person directions. Max 10 words. Format: 'Direction: ahead/left/right, distance, landmark.'"
+        "Blind person directions in 1-2 short sentences, up to 26 words. "
+        "Include direction (ahead/left/right), nearest obstacle, and landmark if visible."
     ),
 }
 
 _SYSTEM_PROMPT = (
     "You are a concise assistant for blind people. "
-    "Always respond in ONE short sentence, 12 words maximum. "
+    "Respond in 1-2 short sentences, ideally under 30 words. "
     "Never start with 'The image shows' or 'I can see' or 'I see'."
 )
 
 
-def trim_to_sentence(text: str, max_words: int = 15) -> str:
+def trim_to_sentence(text: str, max_words: int = 32) -> str:
     """Return text trimmed to max_words, cutting at last sentence boundary (.!?)."""
     words = text.split()
     if len(words) <= max_words:
@@ -75,31 +77,32 @@ def describe_amd(b64: str, prompt: str) -> str:
                 ],
             },
         ],
-        "max_tokens":  50,
+        "max_tokens":  120,
         "temperature": 0.1,
     }
     resp = httpx.post(AMD_ENDPOINT, json=payload, timeout=AMD_TIMEOUT)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"].strip()
-    # Take only first sentence, then trim at sentence boundary
-    first = raw.split(".")[0].strip()
-    result = (first + ".") if first else raw
-    return trim_to_sentence(result)
+    return trim_to_sentence(raw)
 
 
 def describe_gemini(image: Image.Image, prompt: str, api_key: str) -> str:
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        system_instruction=_SYSTEM_PROMPT,
+    import google.genai as genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model="models/gemini-2.5-flash",
+        contents=[_SYSTEM_PROMPT + "\n\n" + prompt, image],
+        config=types.GenerateContentConfig(
+            max_output_tokens=120,
+            temperature=0.2,
+        ),
     )
-    config = genai.types.GenerationConfig(
-        max_output_tokens=60,
-        temperature=0.2,
-    )
-    result = model.generate_content([prompt, image], generation_config=config)
-    return trim_to_sentence(result.text.strip())
+    text = response.text
+    if not text:
+        return "SKIP"
+    return trim_to_sentence(text.strip())
 
 
 def b64_to_image(b64: str) -> Image.Image:

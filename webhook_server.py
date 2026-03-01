@@ -160,14 +160,32 @@ def _call_gemini(b64: str, prompt: str) -> str:
     from google.genai import types
     from PIL import Image
 
+    if not GEMINI_API_KEY:
+        raise RuntimeError("Gemini fallback unavailable: GEMINI_API_KEY is not set")
+
     client = genai.Client(api_key=GEMINI_API_KEY)
     image  = Image.open(io.BytesIO(base64.b64decode(b64)))
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="models/gemini-2.5-flash",
         contents=[prompt, image],
         config=types.GenerateContentConfig(max_output_tokens=60, temperature=0.2),
     )
-    return response.text.strip()
+
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    # Some Gemini responses (safety block / empty candidate) do not expose .text.
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        parts = getattr(content, "parts", None) or []
+        chunks = [getattr(part, "text", "") for part in parts if getattr(part, "text", None)]
+        merged = " ".join(chunks).strip()
+        if merged:
+            return merged
+
+    raise RuntimeError("Gemini returned no text output")
 
 
 async def _run_vision(b64: str, prompt: str) -> str:
@@ -176,7 +194,10 @@ async def _run_vision(b64: str, prompt: str) -> str:
     except Exception as e:
         print(f"AMD failed ({e}), falling back to Gemini...")
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, _call_gemini, b64, prompt)
+        try:
+            return await loop.run_in_executor(None, _call_gemini, b64, prompt)
+        except Exception as ge:
+            raise RuntimeError(f"Both vision backends failed (AMD: {e}; Gemini: {ge})") from ge
 
 
 @app.post("/tools/control")
@@ -216,7 +237,13 @@ async def handle_describe_scene(request: Request):
     if _latest_frame_b64 is None:
         return JSONResponse({"result": "No camera feed yet. Start run_sightline.py on the laptop."})
 
-    description = await _run_vision(_latest_frame_b64, PROMPTS[mode])
+    try:
+        description = await _run_vision(_latest_frame_b64, PROMPTS[mode])
+    except Exception as e:
+        print(f"[WEBHOOK] describe_scene failed: {e}")
+        return JSONResponse({
+            "result": "Vision backend is temporarily unavailable. Please try again in a moment."
+        })
     print(f"[WEBHOOK] mode={mode} → {description}")
     return JSONResponse({"result": description})
 
