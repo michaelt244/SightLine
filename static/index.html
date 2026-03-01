@@ -550,7 +550,7 @@
       align-items: center;
       justify-content: center;
       padding: 16px;
-      gap: 12px;
+      gap: 14px;
       animation: fade-up 420ms ease;
     }
 
@@ -849,6 +849,65 @@
 
       .toast-stack { right: 12px; bottom: 12px; }
     }
+
+    /* ── Voice box (right panel) ──────────────────────── */
+
+    .voice-box {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: var(--surface-strong);
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .voice-box-header {
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding-left: 2px;
+    }
+
+    /* ── Voice active indicator ───────────────────────── */
+
+    .toggle-btn.voice-active {
+      background: #f3fbf6 !important;
+      color: #117939 !important;
+      border-color: rgba(25, 164, 75, 0.35) !important;
+    }
+
+    .voice-pulse-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ok);
+      margin-right: 5px;
+      vertical-align: middle;
+      animation: voice-dot-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes voice-dot-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.45; transform: scale(0.7); }
+    }
+
+    .voice-hint {
+      display: none;
+      font-size: 0.72rem;
+      color: #117939;
+      text-align: center;
+      letter-spacing: 0.3px;
+      padding-top: 2px;
+    }
+
+    .voice-hint.show { display: block; }
+
   </style>
 </head>
 <body>
@@ -902,10 +961,7 @@
         <button class="toggle-btn" id="btn-voice">Voice Command</button>
       </div>
 
-      <div class="voice-section" id="voice-section" style="display:none">
-        <span class="voice-label">Listening...</span>
-        <elevenlabs-convai agent-id="agent_7901kjkkm9jpesna15bwehhwtjr6"></elevenlabs-convai>
-      </div>
+      <div class="voice-hint" id="voice-hint">Speak into your microphone</div>
 
       <section class="summary" id="summary">
         <div class="summary-header" id="summary-toggle">
@@ -960,6 +1016,11 @@
         <button id="start-btn">Start</button>
         <button id="stop-btn" disabled>Stop</button>
       </div>
+
+      <div class="voice-box">
+        <div class="voice-box-header">Voice Agent</div>
+        <elevenlabs-convai agent-id="agent_7901kjkkm9jpesna15bwehhwtjr6"></elevenlabs-convai>
+      </div>
     </section>
 
   </main>
@@ -968,10 +1029,9 @@
 
   <script>
     // ─── Config ────────────────────────────────────────────
-    const API_BASE       = 'http://localhost:8080';
-    const WS_URL         = API_BASE.replace(/^http/, 'ws') + '/ws/live';
-    const AMD_UPLOAD_URL = 'http://165.245.140.111:8081/upload-frame';
-    const CAPTURE_MS     = 5000;
+    const API_BASE   = 'http://localhost:8080';
+    const WS_URL     = API_BASE.replace(/^http/, 'ws') + '/ws/live';
+    const CAPTURE_MS = 5000;
 
     // ─── DOM ───────────────────────────────────────────────
     const video          = document.getElementById('video');
@@ -1234,20 +1294,9 @@
       captureIndicatorEl.classList.add('sending');
       setTimeout(() => captureIndicatorEl.classList.remove('sending'), 400);
 
-      const [localResult, amdResult] = await Promise.allSettled([
-        postFrame(`${API_BASE}/upload-frame`, b64),
-        postFrame(AMD_UPLOAD_URL, b64),
-      ]);
-
-      const localOk = localResult.status === 'fulfilled' && localResult.value;
-      const amdOk   = amdResult.status   === 'fulfilled' && amdResult.value;
-
-      if (!localOk && !amdOk) {
-        localLog('Frame upload failed — both endpoints unreachable', 'error');
-      } else if (!localOk) {
-        localLog('Frame sent to AMD only (local backend offline)', 'system');
-      } else if (!amdOk) {
-        localLog('Frame sent to local backend only (AMD offline)', 'system');
+      const ok = await postFrame(`${API_BASE}/upload-frame`, b64);
+      if (!ok) {
+        localLog('Frame upload failed — backend unreachable', 'error');
       }
     }
 
@@ -1266,44 +1315,74 @@
     }
 
     // ─── Input mode toggle ─────────────────────────────
-    const btnAuto      = document.getElementById('btn-auto');
-    const btnVoice     = document.getElementById('btn-voice');
-    const voiceSection = document.getElementById('voice-section');
+    const btnAuto   = document.getElementById('btn-auto');
+    const btnVoice  = document.getElementById('btn-voice');
+    const voiceHint = document.getElementById('voice-hint');
+    const convaiEl  = document.querySelector('elevenlabs-convai');
 
-    const convaiEl = document.querySelector('elevenlabs-convai');
+    let voiceMode = false;
 
     function stopConvaiCall() {
-      // Attempt to stop any active ElevenLabs session via its DOM API
       try {
-        if (convaiEl && typeof convaiEl.endSession === 'function') convaiEl.endSession();
+        if (convaiEl && typeof convaiEl.endSession === 'function') {
+          convaiEl.endSession();
+          return;
+        }
       } catch {}
-      // Hide immediately so no mic is active
-      voiceSection.style.display = 'none';
+      try {
+        if (convaiEl && convaiEl.shadowRoot) {
+          const endBtn = convaiEl.shadowRoot.querySelector('[data-testid="end-call"]')
+            || convaiEl.shadowRoot.querySelector('button[aria-label="End"]')
+            || [...convaiEl.shadowRoot.querySelectorAll('button')].find(b => b.textContent.includes('End'));
+          if (endBtn) endBtn.click();
+        }
+      } catch {}
     }
 
-    async function setInputMode(mode) {
-      const isVoice = mode === 'voice';
-      btnAuto.classList.toggle('active',  !isVoice);
-      btnVoice.classList.toggle('active',  isVoice);
-
-      if (isVoice) {
-        // 1. Tell server to pause and kill any running say process
-        try { await fetch(`${API_BASE}/api/pause`, { method: 'POST' }); } catch {}
-        // 2. Wait 100ms for silence before showing the widget
-        await new Promise(r => setTimeout(r, 100));
-        voiceSection.style.display = 'flex';
-        localLog('Voice command mode — auto paused');
-      } else {
-        // 1. Stop ElevenLabs call and hide widget immediately
-        stopConvaiCall();
-        // 2. Tell server to resume (with its own 2s cooldown)
-        try { await fetch(`${API_BASE}/api/resume`, { method: 'POST' }); } catch {}
-        localLog('Auto detect resumed (2s cooldown)');
-      }
+    async function startConvaiCall() {
+      // Try native API first
+      try {
+        if (convaiEl && typeof convaiEl.startSession === 'function') {
+          await convaiEl.startSession();
+          return;
+        }
+      } catch {}
+      // Fall back: auto-click the widget's start button in shadow DOM
+      await new Promise(r => setTimeout(r, 500));
+      try {
+        if (convaiEl && convaiEl.shadowRoot) {
+          const btn = convaiEl.shadowRoot.querySelector('button');
+          if (btn) btn.click();
+        }
+      } catch {}
     }
 
-    btnAuto.addEventListener('click',  () => setInputMode('auto'));
-    btnVoice.addEventListener('click', () => setInputMode('voice'));
+    async function enterVoiceMode() {
+      if (voiceMode) return;
+      voiceMode = true;
+      btnAuto.classList.remove('active');
+      btnVoice.classList.add('active', 'voice-active');
+      btnVoice.innerHTML = '<span class="voice-pulse-dot"></span>Voice Active';
+      voiceHint.classList.add('show');
+      try { await fetch(`${API_BASE}/api/pause`, { method: 'POST' }); } catch {}
+      await startConvaiCall();
+      localLog('Voice command mode — auto paused');
+    }
+
+    async function exitVoiceMode() {
+      if (!voiceMode) return;
+      voiceMode = false;
+      btnVoice.classList.remove('active', 'voice-active');
+      btnVoice.textContent = 'Voice Command';
+      voiceHint.classList.remove('show');
+      btnAuto.classList.add('active');
+      stopConvaiCall();
+      try { await fetch(`${API_BASE}/api/resume`, { method: 'POST' }); } catch {}
+      localLog('Auto detect resumed');
+    }
+
+    btnVoice.addEventListener('click', enterVoiceMode);
+    btnAuto.addEventListener('click',  exitVoiceMode);
 
     // ─── Mode buttons ──────────────────────────────────────
     document.querySelectorAll('.mode-btn').forEach(btn => {

@@ -4,9 +4,11 @@ import argparse
 import asyncio
 import json
 import os
+import queue
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -35,9 +37,16 @@ log_entries:      deque          = deque(maxlen=100)
 ws_clients:       Set[WebSocket] = set()
 _processing_lock: asyncio.Lock   = asyncio.Lock()
 _auto_active:     bool           = True
-_speaking:        bool           = False
-_resume_after:    float          = 0.0
+_last_spoken_at:  float          = 0.0
+_speech_queue:    queue.Queue    = queue.Queue()
 start_time = time.time()
+
+SPEECH_DEBOUNCE_SECS = 2.0
+HAZARD_WORDS = frozenset({
+    'car', 'vehicle', 'stairs', 'step', 'edge', 'ledge', 'hole',
+    'stop', 'careful', 'watch out', 'moving', 'danger', 'warning',
+    'hazard', 'traffic', 'fast', 'obstacle',
+})
 
 state = {
     "fallback_remaining": 0,
@@ -63,15 +72,6 @@ def kill_say():
     _say_process = None
 
 
-def speak_mac(text: str):
-    global _say_process
-    if not _auto_active:
-        return
-    kill_say()
-    _say_process = subprocess.Popen(["say", "-r", "200", text])
-    _say_process.wait()  # Block thread until speech finishes (or is killed)
-
-
 def speak_elevenlabs(text: str):
     from elevenlabs.client import ElevenLabs
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
@@ -89,12 +89,39 @@ def speak_elevenlabs(text: str):
     os.unlink(tmp_path)
 
 
-async def play_audio(text: str):
-    loop = asyncio.get_running_loop()
-    if args.voice == "mac":
-        await loop.run_in_executor(None, speak_mac, text)
-    elif args.voice == "elevenlabs":
-        await loop.run_in_executor(None, speak_elevenlabs, text)
+def _speech_worker():
+    """Single background daemon: speaks queued utterances one at a time."""
+    global _say_process, _last_spoken_at
+    while True:
+        text = _speech_queue.get()
+        if not text:
+            _speech_queue.task_done()
+            continue
+        try:
+            if args and args.voice == "mac":
+                _say_process = subprocess.Popen(["say", "-r", "210", text])
+                _say_process.wait()
+                _last_spoken_at = time.time()
+            elif args and args.voice == "elevenlabs":
+                speak_elevenlabs(text)
+                _last_spoken_at = time.time()
+        except Exception as e:
+            print(f"[TTS ERROR] {e}")
+        finally:
+            _speech_queue.task_done()
+
+
+def enqueue_speech(text: str, priority: bool = False):
+    """Add text to the TTS queue. Priority (hazard) drains the queue first."""
+    if priority:
+        kill_say()
+        while not _speech_queue.empty():
+            try:
+                _speech_queue.get_nowait()
+                _speech_queue.task_done()
+            except queue.Empty:
+                break
+    _speech_queue.put(text)
 
 
 async def broadcast(entry: dict):
@@ -112,17 +139,16 @@ async def broadcast(entry: dict):
 
 
 async def process_frame(b64: str):
-    global _speaking
     if not _auto_active:
-        return
-    if time.time() < _resume_after:
-        return
-    if _speaking:
         return
     if _processing_lock.locked():
         return
 
     async with _processing_lock:
+        # Skip black / corrupt frames before spending on inference
+        if await asyncio.get_running_loop().run_in_executor(None, vision.is_black_frame, b64):
+            return
+
         loop   = asyncio.get_running_loop()
         t0     = time.time()
         prompt = vision.PROMPTS[state["focus_mode"]]
@@ -185,14 +211,14 @@ async def process_frame(b64: str):
         if not _auto_active:
             return
 
-        _speaking = True
-        try:
-            print(f"[VOICE] Speaking: {description}")
-            await play_audio(description)
-        except Exception as e:
-            print(f"[TTS ERROR] {e}")
-        finally:
-            _speaking = False
+        is_hazard = any(w in description.lower() for w in HAZARD_WORDS)
+        now = time.time()
+        if not is_hazard and not force_speak and (now - _last_spoken_at < SPEECH_DEBOUNCE_SECS):
+            print(f"[VOICE] Debounced ({now - _last_spoken_at:.1f}s since last)")
+            return
+
+        print(f"[VOICE] Enqueuing: {description}")
+        enqueue_speech(description, priority=is_hazard)
 
 
 app = FastAPI(title="SightLine", version="3.0")
@@ -203,6 +229,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    t = threading.Thread(target=_speech_worker, daemon=True)
+    t.start()
+    print("[TTS] Speech queue worker started")
 
 
 @app.post("/upload-frame")
@@ -252,21 +285,26 @@ async def set_mode(request: Request):
 
 @app.post("/api/pause")
 async def pause_auto():
-    global _auto_active, _speaking
+    global _auto_active
     _auto_active = False
-    _speaking    = False
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, kill_say)
-    print("[AUTO] Paused — voice command mode (say killed)")
+    # Drain any pending speech so nothing plays after pause
+    while not _speech_queue.empty():
+        try:
+            _speech_queue.get_nowait()
+            _speech_queue.task_done()
+        except queue.Empty:
+            break
+    print("[AUTO] Paused — voice command mode")
     return JSONResponse({"ok": True, "active": False})
 
 
 @app.post("/api/resume")
 async def resume_auto():
-    global _auto_active, _resume_after
-    _auto_active  = True
-    _resume_after = time.time() + 2.0  # 2s cooldown before first frame is processed
-    print("[AUTO] Resumed — auto detect mode (2s cooldown)")
+    global _auto_active
+    _auto_active = True
+    print("[AUTO] Resumed — auto detect mode")
     return JSONResponse({"ok": True, "active": True})
 
 
