@@ -1,40 +1,67 @@
 # SightLine
 
-Real-time vision assistant for blind people using Meta Ray-Ban glasses. A laptop captures a WhatsApp video call screen region showing the glasses camera feed, sends frames to a LLaVA vision model running on AMD Cloud GPU (with Gemini Flash fallback), converts descriptions to speech via ElevenLabs, and routes audio back through the call. An ElevenLabs Conversational AI agent handles voice Q&A, calling a webhook server on the AMD machine to describe the current scene on demand.
+Real-time vision assistant for blind people using Meta Ray-Ban glasses and WhatsApp video calls.
+
+A friend on a phone calls the blind user via WhatsApp. The caregiver's phone screen is shared to this browser dashboard, which captures frames and sends them to an AI vision model. Descriptions are spoken aloud in real time.
+
+## Architecture
+
+```
+Browser (static/index.html)
+  └─ getDisplayMedia() → canvas JPEG frames every 3s
+       ├─ POST /upload-frame  → server.py (local, port 8080)
+       └─ POST /upload-frame  → AMD webhook (port 8081, optional)
+
+server.py  (FastAPI, port 8080)
+  ├─ vision.py  → AMD LLaVA or Gemini Flash 2.0
+  ├─ TTS        → macOS say or ElevenLabs
+  ├─ WS /ws/live  → real-time log to dashboard
+  └─ GET /      → serves static/index.html
+
+webhook_server.py  (AMD machine, port 8081)
+  └─ ElevenLabs conversational agent calls /tools/describe_scene
+```
 
 ## Setup
 
 ```bash
-cp .env.example .env   # fill in your API keys
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # add GEMINI_API_KEY, ELEVENLABS_API_KEY
 ```
 
-**Find your screen region** (run once to calibrate):
+## Run
+
 ```bash
-python capture/find_region.py    # screenshots your screen, gives instructions
-python capture/test_region.py    # verify the coordinates capture only the video
+# Default: AMD vision, Mac TTS
+python server.py
+
+# Gemini only, ElevenLabs voice
+python server.py --engine gemini --voice elevenlabs
+
+# Options
+python server.py --engine amd|gemini --voice mac|elevenlabs|none --focus general|ocr|navigation|safety --port 8080
 ```
 
-**Run** (two machines):
-```bash
-# AMD server
-python webhook_server.py
+Open `http://localhost:8080/`, click **Start**, share the WhatsApp window.
 
-# Laptop
-python capture/run_sightline.py
-```
+## AMD webhook (optional)
 
-**Register the ElevenLabs tool** (run once after ngrok is up):
+Runs on the AMD Cloud machine alongside vLLM. Lets the ElevenLabs conversational agent answer spoken questions about the scene.
+
 ```bash
-ngrok http 8081
+# On AMD machine
+python webhook_server.py        # port 8081
+ngrok http 8081                 # expose publicly
 python setup_agent_tool.py --webhook-url https://<ngrok-id>.ngrok-free.app/tools/describe_scene
 ```
 
-## Flags
+## Files
 
-```
---engine amd|gemini    vision backend (default: amd, auto-falls back to gemini)
---interval N           seconds between captures (default: 3)
---focus general|ocr|navigation|safety
---save-frames          save every captured frame to frames/
-```
+| File | Purpose |
+|------|---------|
+| `server.py` | FastAPI server, audio, WebSocket, static serving |
+| `vision.py` | AMD/Gemini vision, prompts, smart filtering |
+| `static/index.html` | Browser dashboard (frame capture + live log) |
+| `webhook_server.py` | AMD machine webhook for ElevenLabs agent |
+| `setup_agent_tool.py` | Register `describe_scene` tool on ElevenLabs agent |

@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SightLine Live</title>
+  <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+  <style>
+    @font-face {
+      font-family: "Konstanz Regular";
+      src: local("Konstanz Regular"), local("Konstanz");
+      font-style: normal;
+      font-weight: 400;
+    }
+
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: rgba(255, 255, 255, 0.9);
+      --ink: #1b1b1b;
+      --muted: #666f7d;
+      --line: rgba(228, 216, 201, 0.9);
+      --brand: #ff6b1f;
+      --brand-hover: #e85f1a;
+      --ok: #19a44b;
+      --warn: #f59e0b;
+      --danger: #d94828;
+      --shadow-soft: 0 16px 34px rgba(20, 18, 14, 0.08);
+      --shadow-deep: 0 26px 70px rgba(20, 18, 14, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: "Konstanz Regular", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 7% 10%, #ffe9d9 0%, transparent 32%),
+        radial-gradient(circle at 92% 12%, #f5eadf 0%, transparent 28%),
+        var(--bg);
+      padding: 18px;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.18;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 4px);
+    }
+
+    .shell {
+      width: min(1280px, 100%);
+      height: calc(100vh - 36px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(290px, 372px) minmax(340px, 1fr);
+      gap: 18px;
+      overflow: hidden;
+      animation: fade-up 380ms ease;
+    }
+
+    .panel, .stage {
+      min-height: 0;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-deep);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::after, .stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+    }
+
+    .panel {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.56rem;
+      letter-spacing: -0.24px;
+      font-weight: 400;
+      line-height: 1.08;
+    }
+
+    /* ── Status card ──────────────────────────────────── */
+
+    .status {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(228,216,201,0.95);
+      background: var(--surface-strong);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .status-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(223,212,197,0.95);
+      background: #fff;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      color: #4f5660;
+      font-weight: 400;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #abb2be;
+      transition: background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .live-pill.on {
+      border-color: #bae7c8;
+      background: #f3fbf6;
+      color: #117939;
+    }
+
+    .live-pill.on .dot {
+      background: var(--ok);
+      box-shadow: 0 0 0 5px rgba(25,164,75,0.15);
+    }
+
+    .stream-meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid rgba(226,214,198,0.95);
+      border-radius: 12px;
+      padding: 7px 8px;
+      background: rgba(255,255,255,0.76);
+      display: grid;
+      gap: 3px;
+      min-height: 52px;
+    }
+
+    .metric-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #8a919d;
+      line-height: 1;
+    }
+
+    .metric-value {
+      font-size: 0.88rem;
+      color: #29303a;
+      line-height: 1.1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    /* ── Mode buttons ─────────────────────────────────── */
+
+    .mode-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 4px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.7);
+      font: inherit;
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease;
+    }
+
+    .mode-btn:hover {
+      background: rgba(255,255,255,0.92);
+      color: var(--ink);
+    }
+
+    .mode-btn:active { transform: translateY(1px); }
+
+    .mode-btn.active {
+      background: var(--brand);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    /* ── Latest description box ───────────────────────── */
+
+    .latest-desc {
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--line);
+      background: var(--surface-strong);
+      flex-shrink: 0;
+      transition: background 280ms ease, border-left-color 280ms ease;
+    }
+
+    .latest-desc.danger {
+      background: rgba(239, 68, 68, 0.07);
+      border-left-color: #ef4444;
+    }
+
+    .latest-desc.caution {
+      border-left-color: var(--warn);
+    }
+
+    .latest-desc.clear {
+      border-left-color: var(--ok);
+    }
+
+    .latest-desc-text {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .latest-desc-text.waiting {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    /* ── Input toggle (Auto Detect / Voice Command) ───── */
+
+    .input-toggle {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.7);
+      font: inherit;
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 120ms ease;
+      white-space: nowrap;
+    }
+
+    .toggle-btn:hover {
+      background: rgba(255,255,255,0.92);
+      color: var(--ink);
+    }
+
+    .toggle-btn:active { transform: translateY(1px); }
+
+    .toggle-btn.active {
+      background: var(--brand);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    /* ── ElevenLabs voice section ─────────────────────── */
+
+    .voice-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .voice-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding-left: 2px;
+    }
+
+    /* ── Session summary ──────────────────────────────── */
+
+    .summary {
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--surface-strong);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .summary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-header:hover {
+      background: rgba(255,255,255,0.5);
+    }
+
+    .summary-title {
+      font-size: 0.74rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .summary-chevron {
+      font-size: 0.6rem;
+      color: var(--muted);
+      display: inline-block;
+      transition: transform 220ms ease;
+    }
+
+    .summary.collapsed .summary-chevron {
+      transform: rotate(180deg);
+    }
+
+    .summary-body {
+      max-height: 120px;
+      overflow: hidden;
+      transition: max-height 240ms ease;
+    }
+
+    .summary.collapsed .summary-body {
+      max-height: 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 8px;
+    }
+
+    .summary-card {
+      border: 1px solid rgba(226,214,198,0.9);
+      border-radius: 10px;
+      padding: 6px 8px;
+      background: rgba(255,255,255,0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .summary-val {
+      font-size: 1.1rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #29303a;
+      line-height: 1;
+    }
+
+    .summary-card.has-hazards .summary-val {
+      color: var(--danger);
+    }
+
+    .summary-lbl {
+      font-size: 0.64rem;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: #8a919d;
+    }
+
+    /* ── Runtime log (light theme) ────────────────────── */
+
+    .log {
+      flex: 1;
+      min-height: 0;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .log h2 {
+      margin: 0;
+      padding: 9px 12px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      font-weight: 400;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.5);
+    }
+
+    #logs {
+      margin: 0;
+      padding: 6px 10px 10px;
+      list-style: none;
+      overflow: auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      flex-wrap: wrap;
+      padding: 3px 7px;
+      border-radius: 6px;
+      border-left: 2px solid transparent;
+      margin-left: -2px;
+    }
+
+    .log-entry.danger       { border-left-color: #ef4444; }
+    .log-entry.caution      { border-left-color: var(--warn); }
+    .log-entry.clear        { border-left-color: var(--ok); }
+    .log-entry.voice-command { border-left-color: #3b82f6; }
+
+    .log-entry.voice-answer {
+      border-left-color: var(--ok);
+    }
+
+    .log-entry.voice-answer .log-text { color: #15803d; }
+
+    .log-entry.error-entry {
+      background: rgba(239, 68, 68, 0.07);
+      border-left-color: var(--danger);
+    }
+
+    .log-entry.error-entry .log-text { color: #b91c1c; }
+
+    #logs .time {
+      color: var(--brand);
+      white-space: nowrap;
+    }
+
+    .log-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #c4cad4;
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    .log-entry.danger .log-dot      { background: #ef4444; }
+    .log-entry.caution .log-dot     { background: var(--warn); }
+    .log-entry.clear .log-dot       { background: var(--ok); }
+    .log-entry.voice-command .log-dot { background: #3b82f6; }
+    .log-entry.voice-answer .log-dot  { background: var(--ok); }
+    .log-entry.error-entry .log-dot   { background: var(--danger); }
+
+    .log-badge {
+      font-size: 0.58rem;
+      padding: 1px 5px;
+      border-radius: 5px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      flex-shrink: 0;
+    }
+
+    .log-badge.amd {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .log-badge.gemini {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .log-text {
+      flex: 1;
+      min-width: 0;
+      color: #374151;
+      word-break: break-word;
+    }
+
+    .log-latency {
+      color: var(--muted);
+      font-size: 0.65rem;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-danger {
+      0%   { background: rgba(239, 68, 68, 0.22); }
+      60%  { background: rgba(239, 68, 68, 0.14); }
+      100% { background: rgba(239, 68, 68, 0.08); }
+    }
+
+    /* ── Stage / phone ────────────────────────────────── */
+
+    .stage {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      gap: 12px;
+      animation: fade-up 420ms ease;
+    }
+
+    .phone {
+      width: min(400px, calc((100vh - 160px) * 0.4615), calc(100% - 10px));
+      aspect-ratio: 9 / 19.5;
+      border-radius: 46px;
+      padding: 12px;
+      background: linear-gradient(150deg, #1c1c1d 0%, #080808 100%);
+      box-shadow: 0 34px 88px rgba(0,0,0,0.45);
+      position: relative;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: box-shadow 250ms ease;
+    }
+
+    .phone.speaking {
+      box-shadow:
+        0 34px 88px rgba(0,0,0,0.45),
+        0 0 0 3px var(--brand),
+        0 0 22px rgba(255,107,31,0.35);
+    }
+
+    .phone::before {
+      content: "";
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 34%;
+      height: 22px;
+      border-radius: 999px;
+      background: #010101;
+      z-index: 4;
+    }
+
+    .phone::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background: linear-gradient(170deg, rgba(255,255,255,0.2) 0%, transparent 36%);
+      opacity: 0.28;
+    }
+
+    .screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 34px;
+      overflow: hidden;
+      position: relative;
+      background: #fff;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+
+    #video {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 58%;
+      transform: translate(-50%, -50%) scale(1.18);
+      transform-origin: center;
+      background: #fff;
+      opacity: 0;
+      transition: opacity 220ms ease;
+    }
+
+    .screen.live #video { opacity: 1; }
+
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #66707e;
+      font-size: 0.88rem;
+      line-height: 1.35;
+      background:
+        linear-gradient(180deg, rgba(255,251,245,0.88), rgba(255,255,255,0.95)),
+        repeating-linear-gradient(-45deg, rgba(203,213,225,0.17), rgba(203,213,225,0.17) 12px, rgba(255,255,255,0.2) 12px, rgba(255,255,255,0.2) 24px);
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+
+    .placeholder-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid rgba(229,217,201,0.95);
+      background: rgba(255,255,255,0.86);
+      display: grid;
+      place-items: center;
+      color: #9aa3b2;
+      font-size: 1rem;
+    }
+
+    .screen.live .placeholder {
+      opacity: 0;
+      transform: scale(1.012);
+      pointer-events: none;
+    }
+
+    /* Speaking label inside screen */
+    .speaking-label {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 0.3px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      opacity: 0;
+      z-index: 5;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    /* ── Phone controls below mockup ──────────────────── */
+
+    .phone-controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      z-index: 1;
+    }
+
+    .phone-controls button {
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 8px 18px;
+      font: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: transform 120ms ease, filter 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    .phone-controls button:hover  { filter: brightness(0.96); }
+    .phone-controls button:active { transform: translateY(1px) scale(0.995); }
+
+    #start-btn { background: var(--brand); color: #fff; }
+    #start-btn:hover { background: var(--brand-hover); }
+
+    #stop-btn {
+      background: rgba(255,255,255,0.92);
+      color: var(--danger);
+      border-color: #f5c8b8;
+    }
+
+    #stop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Hazard banner ────────────────────────────────── */
+
+    .hazard-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 60;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: #fff;
+      font-family: "Konstanz Regular", "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.86rem;
+      letter-spacing: 0.4px;
+      text-align: center;
+      padding: 11px 20px;
+      transform: translateY(-100%);
+      transition: transform 280ms cubic-bezier(0.34, 1.26, 0.64, 1);
+      pointer-events: none;
+    }
+
+    .hazard-banner.show {
+      transform: translateY(0);
+    }
+
+    /* ── Toast ────────────────────────────────────────── */
+
+    .toast-stack {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      display: grid;
+      gap: 8px;
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    .toast {
+      min-width: 220px;
+      max-width: 320px;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow-soft);
+      color: #1f2937;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { border-color: rgba(25,164,75,0.35); color: #0f6f33; }
+    .toast.warn    { border-color: rgba(245,158,11,0.4); color: #8a5a00; }
+    .toast.error   { border-color: rgba(217,72,40,0.35); color: #9f2b13; }
+
+    /* ── Animations ───────────────────────────────────── */
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Capture indicator ────────────────────────────── */
+
+    .capture-indicator {
+      position: absolute;
+      top: 36px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.48);
+      color: #fff;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 0.6rem;
+      letter-spacing: 0.2px;
+      padding: 3px 8px 3px 6px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      opacity: 0;
+      transition: opacity 220ms ease, background 200ms ease;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .capture-indicator.active {
+      opacity: 1;
+    }
+
+    .capture-indicator.sending {
+      background: rgba(255, 107, 31, 0.72);
+    }
+
+    .capture-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--brand);
+      flex-shrink: 0;
+    }
+
+    .capture-indicator.active .capture-dot {
+      animation: capture-pulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes capture-pulse {
+      0%, 100% { opacity: 1;    transform: scale(1);   }
+      50%       { opacity: 0.3; transform: scale(0.75); }
+    }
+
+    /* ── Responsive ───────────────────────────────────── */
+
+    @media (max-width: 980px) {
+      body { padding: 12px; }
+
+      .shell {
+        height: calc(100vh - 24px);
+        grid-template-columns: minmax(230px, 310px) 1fr;
+        gap: 12px;
+      }
+
+      .panel { padding: 14px; }
+
+      .phone {
+        width: min(360px, calc((100vh - 130px) * 0.4615), calc(100% - 8px));
+      }
+
+      .metrics { grid-template-columns: 1fr; }
+
+      .mode-row { flex-wrap: wrap; }
+      .mode-btn { flex: 1 0 calc(50% - 3px); }
+
+      .toast-stack { right: 12px; bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hazard-banner" id="hazard-banner"></div>
+
+  <main class="shell">
+
+    <!-- ── Left panel ──────────────────────────────────── -->
+    <section class="panel">
+      <h1>SightLine</h1>
+
+      <section class="status">
+        <div class="status-top">
+          <div class="live-pill" id="live-pill">
+            <span class="dot"></span>
+            <span id="live-text">Offline</span>
+          </div>
+          <span class="stream-meta" id="stream-meta">Waiting for backend...</span>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Engine</span>
+            <span class="metric-value" id="metric-engine">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Latency</span>
+            <span class="metric-value" id="metric-latency">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Frames</span>
+            <span class="metric-value" id="metric-frames">0</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="mode-row">
+        <button class="mode-btn active" data-mode="general">General</button>
+        <button class="mode-btn" data-mode="safety">Safety</button>
+        <button class="mode-btn" data-mode="ocr">Read Text</button>
+        <button class="mode-btn" data-mode="navigation">Navigate</button>
+      </div>
+
+      <div class="latest-desc" id="latest-desc">
+        <p class="latest-desc-text waiting" id="latest-desc-text">Waiting for first frame...</p>
+      </div>
+
+      <div class="input-toggle">
+        <button class="toggle-btn active" id="btn-auto">Auto Detect</button>
+        <button class="toggle-btn" id="btn-voice">Voice Command</button>
+      </div>
+
+      <div class="voice-section" id="voice-section" style="display:none">
+        <span class="voice-label">Listening...</span>
+        <elevenlabs-convai agent-id="agent_7901kjkkm9jpesna15bwehhwtjr6"></elevenlabs-convai>
+      </div>
+
+      <section class="summary" id="summary">
+        <div class="summary-header" id="summary-toggle">
+          <span class="summary-title">Session</span>
+          <span class="summary-chevron">▾</span>
+        </div>
+        <div class="summary-body">
+          <div class="summary-grid">
+            <div class="summary-card" id="card-hazards">
+              <span class="summary-val" id="stat-hazards">0</span>
+              <span class="summary-lbl">Hazards</span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-val" id="stat-descriptions">0</span>
+              <span class="summary-lbl">Descriptions</span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-val" id="stat-questions">0</span>
+              <span class="summary-lbl">Questions</span>
+            </div>
+            <div class="summary-card">
+              <span class="summary-val" id="stat-duration">0:00</span>
+              <span class="summary-lbl">Duration</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="log">
+        <h2>Runtime Log</h2>
+        <ul id="logs"></ul>
+      </section>
+    </section>
+
+    <!-- ── Right panel (phone mockup) ─────────────────── -->
+    <section class="stage">
+      <div class="phone" id="phone" aria-label="Phone preview window">
+        <div class="screen" id="screen">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="placeholder" id="placeholder">
+            <div class="placeholder-mark">+</div>
+            <div>Select a source to start preview</div>
+          </div>
+          <div class="speaking-label" id="speaking-label">Speaking...</div>
+          <div class="capture-indicator" id="capture-indicator">
+            <span class="capture-dot"></span>
+            <span>Capturing</span>
+          </div>
+        </div>
+      </div>
+      <div class="phone-controls">
+        <button id="start-btn">Start</button>
+        <button id="stop-btn" disabled>Stop</button>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script>
+    // ─── Config ────────────────────────────────────────────
+    const API_BASE       = 'http://localhost:8080';
+    const WS_URL         = API_BASE.replace(/^http/, 'ws') + '/ws/live';
+    const AMD_UPLOAD_URL = 'http://165.245.140.111:8081/upload-frame';
+    const CAPTURE_MS     = 5000;
+
+    // ─── DOM ───────────────────────────────────────────────
+    const video          = document.getElementById('video');
+    const screenEl       = document.getElementById('screen');
+    const phoneEl        = document.getElementById('phone');
+    const speakingLabel      = document.getElementById('speaking-label');
+    const captureIndicatorEl = document.getElementById('capture-indicator');
+    const startBtn           = document.getElementById('start-btn');
+    const stopBtn        = document.getElementById('stop-btn');
+    const livePill       = document.getElementById('live-pill');
+    const liveText       = document.getElementById('live-text');
+    const streamMeta     = document.getElementById('stream-meta');
+    const logsEl         = document.getElementById('logs');
+    const toastStack     = document.getElementById('toast-stack');
+    const hazardBanner   = document.getElementById('hazard-banner');
+    const metricEngine   = document.getElementById('metric-engine');
+    const metricLatency  = document.getElementById('metric-latency');
+    const metricFrames   = document.getElementById('metric-frames');
+    const statHazards    = document.getElementById('stat-hazards');
+    const statDescs      = document.getElementById('stat-descriptions');
+    const statQuestions  = document.getElementById('stat-questions');
+    const statDuration   = document.getElementById('stat-duration');
+    const cardHazards    = document.getElementById('card-hazards');
+    const summaryEl      = document.getElementById('summary');
+    const latestDescEl   = document.getElementById('latest-desc');
+    const latestDescText = document.getElementById('latest-desc-text');
+
+    // ─── State ─────────────────────────────────────────────
+    let activeStream    = null;
+    let wsConnected     = false;
+    let ws              = null;
+    let totalFrames     = 0;
+    let hazardCount     = 0;
+    let descCount       = 0;
+    let questionCount   = 0;
+    let latestTimestamp = new Date().toISOString();
+    let speakTimer      = null;
+    let bannerTimer     = null;
+    let captureInterval = null;
+    const startTime     = Date.now();
+
+    const FRAMING = { zoom: 1.18, x: 50, y: 58 };
+
+    // ─── Duration timer ────────────────────────────────────
+    setInterval(() => {
+      const s   = Math.floor((Date.now() - startTime) / 1000);
+      const m   = Math.floor(s / 60);
+      const sec = String(s % 60).padStart(2, '0');
+      statDuration.textContent = `${m}:${sec}`;
+    }, 1000);
+
+    // ─── Summary collapse ──────────────────────────────────
+    document.getElementById('summary-toggle').addEventListener('click', () => {
+      summaryEl.classList.toggle('collapsed');
+    });
+
+    // ─── Danger classification ─────────────────────────────
+    const DANGER_WORDS  = ['car', 'vehicle', 'stairs', 'edge', 'ledge', 'hole', 'stop', 'careful', 'watch out', 'moving'];
+    const CAUTION_WORDS = ['person', 'people', 'approaching', 'close', 'obstacle', 'blocked', 'door'];
+    const CLEAR_WORDS   = ['clear', 'safe', 'open', 'nothing', 'empty'];
+
+    function getDangerLevel(text, type) {
+      if (type === 'error')         return 'error-entry';
+      if (type === 'voice_command') return 'voice-command';
+      if (type === 'voice_answer')  return 'voice-answer';
+      const l = (text || '').toLowerCase();
+      if (DANGER_WORDS.some(k  => l.includes(k))) return 'danger';
+      if (CAUTION_WORDS.some(k => l.includes(k))) return 'caution';
+      if (CLEAR_WORDS.some(k   => l.includes(k))) return 'clear';
+      return 'info';
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function formatTime(ts) {
+      try {
+        return ts ? new Date(ts).toLocaleTimeString([], { hour12: false }) : new Date().toLocaleTimeString([], { hour12: false });
+      } catch { return String(ts || ''); }
+    }
+
+    // ─── Toast ─────────────────────────────────────────────
+    function showToast(message, type = 'default') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      toastStack.prepend(toast);
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 220);
+      }, 2600);
+    }
+
+    // ─── Hazard banner ─────────────────────────────────────
+    function showHazardBanner(text) {
+      hazardBanner.textContent = `HAZARD — ${text}`;
+      hazardBanner.classList.add('show');
+      clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => hazardBanner.classList.remove('show'), 3000);
+    }
+
+    // ─── Speaking indicator ────────────────────────────────
+    function triggerSpeakingIndicator() {
+      phoneEl.classList.remove('speaking');
+      void phoneEl.offsetWidth; // force reflow to restart transition
+      phoneEl.classList.add('speaking');
+      speakingLabel.style.opacity = '1';
+      clearTimeout(speakTimer);
+      speakTimer = setTimeout(() => {
+        speakingLabel.style.opacity = '0';
+        phoneEl.classList.remove('speaking');
+      }, 1500);
+    }
+
+    // ─── Log entries ───────────────────────────────────────
+    function buildLogLine(type, engine, text, latency_ms) {
+      const lat = latency_ms ? ` · ${(latency_ms / 1000).toFixed(1)}s` : '';
+      const clip = (s, n) => (s || '').length > n ? s.slice(0, n) + '…' : (s || '');
+      switch (type) {
+        case 'description':   return `Auto — ${engine || 'AI'}${lat}`;
+        case 'voice_command': return `Voice — "${clip(text, 36)}"`;
+        case 'voice_answer':  return `Response — "${clip(text, 36)}"${lat}`;
+        case 'mode':          return `Mode — ${text}`;
+        case 'error':         return `Error — ${clip(text, 50)}`;
+        default:              return `System — ${clip(text, 50)}`;
+      }
+    }
+
+    function addLogEntry({ timestamp, type, engine, text, latency_ms }) {
+      const level = getDangerLevel(text, type);
+
+      // Update latest description box
+      if (type === 'description') {
+        latestDescEl.className       = `latest-desc ${level}`;
+        latestDescText.className     = 'latest-desc-text';
+        latestDescText.textContent   = text;
+      }
+
+      // Side effects
+      if (level === 'danger') {
+        showHazardBanner(text);
+        hazardCount++;
+        statHazards.textContent = hazardCount;
+        cardHazards.classList.add('has-hazards');
+      }
+
+      if (type === 'description') {
+        descCount++;
+        statDescs.textContent    = descCount;
+        totalFrames++;
+        metricFrames.textContent = totalFrames;
+        triggerSpeakingIndicator();
+      }
+
+      if (type === 'voice_answer') {
+        questionCount++;
+        statQuestions.textContent = questionCount;
+      }
+
+      if (latency_ms) metricLatency.textContent = `${(latency_ms / 1000).toFixed(1)}s`;
+      if (engine)     metricEngine.textContent   = engine;
+
+      // Compact log line
+      const item = document.createElement('li');
+      item.className = `log-entry ${level}`;
+      item.innerHTML = `<span class="log-dot"></span><span class="time">${formatTime(timestamp)}</span><span class="log-text">${escapeHtml(buildLogLine(type, engine, text, latency_ms))}</span>`;
+      logsEl.prepend(item);
+      if (logsEl.children.length > 100) logsEl.removeChild(logsEl.lastElementChild);
+    }
+
+    function localLog(text, type = 'system') {
+      addLogEntry({ timestamp: null, type, engine: '', text, latency_ms: 0 });
+    }
+
+    // ─── Backend connectivity ──────────────────────────────
+    function setBackendStatus(connected) {
+      wsConnected = connected;
+      livePill.classList.toggle('on', connected);
+      liveText.textContent   = connected ? 'Live' : 'Offline';
+      streamMeta.textContent = connected ? `Connected · ${API_BASE}` : 'Waiting for backend...';
+    }
+
+    // ─── WebSocket ─────────────────────────────────────────
+    function connectWS() {
+      try {
+        ws = new WebSocket(WS_URL);
+        ws.onopen    = () => { setBackendStatus(true); localLog('WebSocket connected'); };
+        ws.onmessage = (e) => { try { addLogEntry(JSON.parse(e.data)); } catch {} };
+        ws.onclose   = () => { ws = null; setBackendStatus(false); setTimeout(connectWS, 5000); };
+        ws.onerror   = () => ws && ws.close();
+      } catch {
+        setBackendStatus(false);
+        setTimeout(connectWS, 5000);
+      }
+    }
+
+    // ─── Polling fallback ──────────────────────────────────
+    async function pollLogs() {
+      if (wsConnected) return;
+      try {
+        const resp = await fetch(`${API_BASE}/api/logs`);
+        if (!resp.ok) return;
+        const data    = await resp.json();
+        const entries = Array.isArray(data) ? data : (data.entries || []);
+        const fresh   = entries
+          .filter(e => e.timestamp > latestTimestamp)
+          .sort((a, b) => a.timestamp < b.timestamp ? -1 : 1);
+        fresh.forEach(e => {
+          if (e.timestamp > latestTimestamp) latestTimestamp = e.timestamp;
+          addLogEntry(e);
+        });
+        if (fresh.length) setBackendStatus(true);
+      } catch {}
+    }
+
+    async function pollStatus() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/status`);
+        if (!resp.ok) { if (!wsConnected) setBackendStatus(false); return; }
+        const data = await resp.json();
+        if (!wsConnected) setBackendStatus(true);
+        if (data.engine)                     metricEngine.textContent  = data.engine;
+        if (data.latency_ms)                 metricLatency.textContent = `${(data.latency_ms / 1000).toFixed(1)}s`;
+        if (typeof data.frames === 'number') { totalFrames = data.frames; metricFrames.textContent = totalFrames; }
+      } catch {
+        if (!wsConnected) setBackendStatus(false);
+      }
+    }
+
+    // ─── Frame capture ─────────────────────────────────────
+    function getFrameBase64() {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) return null;
+      const MAX_W  = 1024;
+      const scale  = vw > MAX_W ? MAX_W / vw : 1;
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.floor(vw * scale);
+      canvas.height = Math.floor(vh * scale);
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+    }
+
+    async function postFrame(url, b64) {
+      const resp = await fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ frame: b64 }),
+      });
+      return resp.ok;
+    }
+
+    async function captureAndSend() {
+      if (!activeStream) return;
+      const b64 = getFrameBase64();
+      if (!b64) return;
+
+      captureIndicatorEl.classList.add('sending');
+      setTimeout(() => captureIndicatorEl.classList.remove('sending'), 400);
+
+      const [localResult, amdResult] = await Promise.allSettled([
+        postFrame(`${API_BASE}/upload-frame`, b64),
+        postFrame(AMD_UPLOAD_URL, b64),
+      ]);
+
+      const localOk = localResult.status === 'fulfilled' && localResult.value;
+      const amdOk   = amdResult.status   === 'fulfilled' && amdResult.value;
+
+      if (!localOk && !amdOk) {
+        localLog('Frame upload failed — both endpoints unreachable', 'error');
+      } else if (!localOk) {
+        localLog('Frame sent to AMD only (local backend offline)', 'system');
+      } else if (!amdOk) {
+        localLog('Frame sent to local backend only (AMD offline)', 'system');
+      }
+    }
+
+    function startCapture() {
+      if (captureInterval) return;
+      captureAndSend();
+      captureInterval = setInterval(captureAndSend, CAPTURE_MS);
+      captureIndicatorEl.classList.add('active');
+      localLog(`Frame capture started (every ${CAPTURE_MS / 1000}s)`);
+    }
+
+    function stopCapture() {
+      clearInterval(captureInterval);
+      captureInterval = null;
+      captureIndicatorEl.classList.remove('active', 'sending');
+    }
+
+    // ─── Input mode toggle ─────────────────────────────
+    const btnAuto      = document.getElementById('btn-auto');
+    const btnVoice     = document.getElementById('btn-voice');
+    const voiceSection = document.getElementById('voice-section');
+
+    const convaiEl = document.querySelector('elevenlabs-convai');
+
+    function stopConvaiCall() {
+      // Attempt to stop any active ElevenLabs session via its DOM API
+      try {
+        if (convaiEl && typeof convaiEl.endSession === 'function') convaiEl.endSession();
+      } catch {}
+      // Hide immediately so no mic is active
+      voiceSection.style.display = 'none';
+    }
+
+    async function setInputMode(mode) {
+      const isVoice = mode === 'voice';
+      btnAuto.classList.toggle('active',  !isVoice);
+      btnVoice.classList.toggle('active',  isVoice);
+
+      if (isVoice) {
+        // 1. Tell server to pause and kill any running say process
+        try { await fetch(`${API_BASE}/api/pause`, { method: 'POST' }); } catch {}
+        // 2. Wait 100ms for silence before showing the widget
+        await new Promise(r => setTimeout(r, 100));
+        voiceSection.style.display = 'flex';
+        localLog('Voice command mode — auto paused');
+      } else {
+        // 1. Stop ElevenLabs call and hide widget immediately
+        stopConvaiCall();
+        // 2. Tell server to resume (with its own 2s cooldown)
+        try { await fetch(`${API_BASE}/api/resume`, { method: 'POST' }); } catch {}
+        localLog('Auto detect resumed (2s cooldown)');
+      }
+    }
+
+    btnAuto.addEventListener('click',  () => setInputMode('auto'));
+    btnVoice.addEventListener('click', () => setInputMode('voice'));
+
+    // ─── Mode buttons ──────────────────────────────────────
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mode = btn.dataset.mode;
+        try {
+          await fetch(`${API_BASE}/api/mode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode }),
+          });
+          addLogEntry({ timestamp: null, type: 'mode', engine: '', text: mode, latency_ms: 0 });
+        } catch (e) {
+          localLog(`Mode change failed: ${e.message}`, 'error');
+        }
+      });
+    });
+
+    // ─── Screen capture ────────────────────────────────────
+    function applyFixedFraming() {
+      video.style.transform      = `translate(-50%, -50%) scale(${FRAMING.zoom})`;
+      video.style.objectPosition = `${FRAMING.x}% ${FRAMING.y}%`;
+    }
+
+    function setStreamState(isLive) {
+      screenEl.classList.toggle('live', isLive);
+      stopBtn.disabled = !isLive;
+    }
+
+    function stopCurrentStream({ silent = false } = {}) {
+      if (!activeStream) return;
+      activeStream.getTracks().forEach(t => t.stop());
+      activeStream = null;
+      video.srcObject = null;
+      setStreamState(false);
+      stopCapture();
+      if (!silent) {
+        localLog('Stream stopped');
+        showToast('Stream stopped', 'warn');
+      }
+    }
+
+    async function startLiveOutput() {
+      try {
+        stopCurrentStream({ silent: true });
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 30, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+        activeStream = stream;
+        video.srcObject = stream;
+        applyFixedFraming();
+        setStreamState(true);
+        startCapture();
+
+        const [track] = stream.getVideoTracks();
+        const settings = track ? track.getSettings() : {};
+        const w   = settings.width     || '?';
+        const h   = settings.height    || '?';
+        const fps = settings.frameRate ? Math.round(settings.frameRate) : '?';
+
+        localLog(`Source active (${w}x${h} @ ${fps}fps)`);
+        showToast('Source connected', 'success');
+
+        if (track) {
+          track.addEventListener('ended', () => {
+            stopCurrentStream({ silent: true });
+            localLog('Capture ended by browser or user');
+            showToast('Capture ended', 'warn');
+          });
+        }
+      } catch (error) {
+        setStreamState(false);
+        localLog(`Start failed: ${error.message}`, 'error');
+        showToast('Permission or source selection failed', 'error');
+      }
+    }
+
+    startBtn.addEventListener('click', startLiveOutput);
+    stopBtn.addEventListener('click', () => stopCurrentStream());
+
+    // ─── Init ──────────────────────────────────────────────
+    applyFixedFraming();
+    setBackendStatus(false);
+    connectWS();
+    setInterval(pollStatus, 2000);
+    setInterval(pollLogs,   3000);
+    localLog('SightLine ready.');
+  </script>
+</body>
+</html>

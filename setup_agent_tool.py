@@ -41,7 +41,7 @@ def print_curl(webhook_url: str):
     print()
     print(f"curl -s -X PATCH \\")
     print(f"  https://api.elevenlabs.io/v1/convai/agents/{AGENT_ID} \\")
-    print(f"  -H 'xi-api-key: {ELEVENLABS_API_KEY or \"YOUR_ELEVENLABS_API_KEY\"}' \\")
+    print(f"  -H 'xi-api-key: {ELEVENLABS_API_KEY }' \\")
     print(f"  -H 'Content-Type: application/json' \\")
     print(f"  -d '{json.dumps(body)}'")
     print()

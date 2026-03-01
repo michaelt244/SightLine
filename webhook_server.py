@@ -20,6 +20,7 @@ AMD_TIMEOUT  = 15.0
 
 _latest_frame_b64:  Optional[str]   = None
 _latest_frame_time: Optional[float] = None
+sightline_active:   bool            = True
 
 PROMPTS = {
     "general": (
@@ -95,8 +96,32 @@ async def _run_vision(b64: str, prompt: str) -> str:
         return await loop.run_in_executor(None, _call_gemini, b64, prompt)
 
 
+@app.post("/tools/control")
+async def control(request: Request):
+    global sightline_active
+    body    = await request.json()
+    command = body.get("command", "").lower()
+    if command == "off":
+        sightline_active = False
+        print("[CONTROL] SightLine paused")
+        return JSONResponse({"result": "SightLine paused"})
+    if command == "on":
+        sightline_active = True
+        print("[CONTROL] SightLine resumed")
+        return JSONResponse({"result": "SightLine resumed"})
+    return JSONResponse({"result": f"Unknown command: {command}"}, status_code=400)
+
+
+@app.get("/tools/status")
+async def status():
+    return {"active": sightline_active}
+
+
 @app.post("/tools/describe_scene")
 async def handle_describe_scene(request: Request):
+    if not sightline_active:
+        return JSONResponse({"result": "SightLine is currently paused. Say turn on to resume."})
+
     body = await request.json()
 
     # ElevenLabs places parameters at different paths depending on SDK version
