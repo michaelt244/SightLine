@@ -26,3 +26,5 @@ capture/frames/
 .vscode/
 .idea/
 *.swp
+.claude
+
