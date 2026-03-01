@@ -1,27 +1,21 @@
 """
-SightLine — Vision Pipeline
-Wraps Llama 3.2 Vision (11B) via vLLM (AMD GPU) or Ollama (local fallback).
+SightLine vision pipeline — wraps LLaVA/Llama Vision via vLLM or Ollama.
 
-Swap the backend by setting VISION_BACKEND env var:
-    VISION_BACKEND=vllm    → uses vLLM OpenAI-compatible API (AMD Cloud)
-    VISION_BACKEND=ollama  → uses local Ollama
-    VISION_BACKEND=mock    → returns fake data (useful for front-end dev)
+VISION_BACKEND=vllm    → OpenAI-compatible API (AMD Cloud)
+VISION_BACKEND=ollama  → local Ollama
+VISION_BACKEND=mock    → static responses for front-end dev
 """
 
 import base64
-import io
 import os
 from typing import Optional
 
 import httpx
-from PIL import Image
 
-VISION_BACKEND = os.getenv("VISION_BACKEND", "mock")
-VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
+VISION_BACKEND  = os.getenv("VISION_BACKEND", "mock")
+VLLM_BASE_URL   = os.getenv("VLLM_BASE_URL",  "http://localhost:8001/v1")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2-vision:11b")
-
-# ── Prompt templates per mode ──────────────────────────────────────────────────
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "llama3.2-vision:11b")
 
 PROMPTS = {
     "general": (
@@ -45,6 +39,14 @@ PROMPTS = {
     ),
 }
 
+SAFETY_KEYWORDS = {
+    "stairs_detected": ["stair", "step", "steps"],
+    "obstacle_ahead":  ["obstacle", "blocking", "in your path"],
+    "vehicle_nearby":  ["car", "vehicle", "bus", "truck", "moving"],
+    "drop_ahead":      ["drop", "edge", "ledge", "cliff"],
+    "wet_floor":       ["wet", "slippery", "puddle"],
+}
+
 
 class VisionPipeline:
     def __init__(self):
@@ -58,10 +60,7 @@ class VisionPipeline:
             return OLLAMA_MODEL
         return "mock"
 
-    # ── Public interface ───────────────────────────────────────────────────────
-
     async def describe(self, image_bytes: bytes, mode: str = "general") -> dict:
-        """Returns {"description": str, "safety_alerts": list[str], "confidence": float}"""
         prompt = PROMPTS.get(mode, PROMPTS["general"])
 
         if VISION_BACKEND == "vllm":
@@ -71,32 +70,20 @@ class VisionPipeline:
         else:
             text = self._mock_describe(mode)
 
-        safety_alerts = self._extract_safety_alerts(text, mode)
         return {
-            "description": text,
-            "safety_alerts": safety_alerts,
-            "confidence": 0.9 if VISION_BACKEND != "mock" else 1.0,
+            "description":   text,
+            "safety_alerts": self._extract_safety_alerts(text),
+            "confidence":    0.9 if VISION_BACKEND != "mock" else 1.0,
         }
 
-    async def ask(
-        self,
-        image_bytes: Optional[bytes],
-        question: str,
-        context: list[str],
-    ) -> dict:
-        """Returns {"answer": str, "confidence": float}"""
-        context_block = ""
-        if context:
-            context_block = (
-                "Recent scene descriptions for context:\n"
-                + "\n".join(f"- {c}" for c in context[-3:])
-                + "\n\n"
-            )
-
+    async def ask(self, image_bytes: Optional[bytes], question: str, context: list[str]) -> dict:
+        context_block = (
+            "Recent scene descriptions:\n" + "\n".join(f"- {c}" for c in context[-3:]) + "\n\n"
+            if context else ""
+        )
         prompt = (
-            f"{context_block}"
-            f"The user asks: {question}\n"
-            "Answer concisely and helpfully. If the answer is visible in the image, use it. "
+            f"{context_block}The user asks: {question}\n"
+            "Answer concisely. If the answer is visible in the image, use it. "
             "If relying on context, say so briefly."
         )
 
@@ -104,29 +91,23 @@ class VisionPipeline:
             text = await self._call_vllm(image_bytes, prompt)
         elif image_bytes and VISION_BACKEND == "ollama":
             text = await self._call_ollama(image_bytes, prompt)
-        elif VISION_BACKEND == "mock" or not image_bytes:
-            text = self._mock_ask(question, context)
         else:
-            text = "I'm not sure — I don't have a current view."
+            text = self._mock_ask(question, context)
 
         return {"answer": text, "confidence": 0.88}
 
-    # ── vLLM backend (AMD GPU / OpenAI-compatible API) ─────────────────────────
-
     async def _call_vllm(self, image_bytes: bytes, prompt: str) -> str:
-        b64 = base64.b64encode(image_bytes).decode()
+        b64     = base64.b64encode(image_bytes).decode()
         payload = {
             "model": self.model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                        {"type": "text", "text": prompt},
-                    ],
-                }
-            ],
-            "max_tokens": 256,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    {"type": "text", "text": prompt},
+                ],
+            }],
+            "max_tokens":  256,
             "temperature": 0.3,
         }
         async with httpx.AsyncClient(timeout=30) as client:
@@ -134,15 +115,13 @@ class VisionPipeline:
             resp.raise_for_status()
             return resp.json()["choices"][0]["message"]["content"].strip()
 
-    # ── Ollama backend (local) ─────────────────────────────────────────────────
-
     async def _call_ollama(self, image_bytes: bytes, prompt: str) -> str:
-        b64 = base64.b64encode(image_bytes).decode()
+        b64     = base64.b64encode(image_bytes).decode()
         payload = {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "images": [b64],
-            "stream": False,
+            "model":   OLLAMA_MODEL,
+            "prompt":  prompt,
+            "images":  [b64],
+            "stream":  False,
             "options": {"temperature": 0.3, "num_predict": 256},
         }
         async with httpx.AsyncClient(timeout=30) as client:
@@ -150,33 +129,20 @@ class VisionPipeline:
             resp.raise_for_status()
             return resp.json()["response"].strip()
 
-    # ── Safety alert extraction ────────────────────────────────────────────────
-
-    def _extract_safety_alerts(self, text: str, mode: str) -> list[str]:
-        alerts = []
-        keywords = {
-            "stairs_detected": ["stair", "step", "steps"],
-            "obstacle_ahead": ["obstacle", "blocking", "in your path"],
-            "vehicle_nearby": ["car", "vehicle", "bus", "truck", "moving"],
-            "drop_ahead": ["drop", "edge", "ledge", "cliff"],
-            "wet_floor": ["wet", "slippery", "puddle"],
-        }
+    def _extract_safety_alerts(self, text: str) -> list[str]:
         lower = text.lower()
-        for alert_key, words in keywords.items():
-            if any(w in lower for w in words):
-                alerts.append(alert_key)
-        return alerts
-
-    # ── Mock backend (no GPU needed) ──────────────────────────────────────────
+        return [
+            key for key, words in SAFETY_KEYWORDS.items()
+            if any(w in lower for w in words)
+        ]
 
     def _mock_describe(self, mode: str) -> str:
-        mocks = {
-            "general": "You're in a medium-sized room with several people seated at tables. There's an open path ahead of you.",
-            "ocr": "The sign reads: 'EXIT — Push bar to open'.",
+        return {
+            "general":    "You're in a medium-sized room with several people seated at tables. There's an open path ahead of you.",
+            "ocr":        "The sign reads: 'EXIT — Push bar to open'.",
             "navigation": "The corridor extends straight ahead for about 10 feet, then turns left. There's a door on your right.",
-            "safety": "Clear path ahead. No immediate hazards detected. Two people are seated to your left.",
-        }
-        return mocks.get(mode, mocks["general"])
+            "safety":     "Clear path ahead. No immediate hazards detected. Two people are seated to your left.",
+        }.get(mode, "Clear path ahead.")
 
     def _mock_ask(self, question: str, context: list[str]) -> str:
-        return f"[Mock] Based on the scene, the answer to '{question}' is: this is a placeholder response for development."
+        return f"[Mock] Based on the scene, here is a placeholder answer to '{question}'."

@@ -1,25 +1,12 @@
-# SightLine Dependencies
-# Install: pip install -r requirements.txt
-
-# Backend server
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 python-multipart==0.0.9
 websockets==12.0
 httpx==0.27.0
 pydantic==2.9.0
-
-# Image processing
 Pillow==10.4.0
-
-# Stream capture
 mss==9.0.2
 yt-dlp==2024.8.6
-
-# ElevenLabs
 elevenlabs==1.9.0
-
-# Vision model — uncomment whichever you use:
-# vllm==0.6.0          # AMD Cloud deployment (GPU)
-# ollama               # Install separately: https://ollama.ai
-# google-generativeai==0.8.0  # Gemini fallback
+google-generativeai
+python-dotenv
