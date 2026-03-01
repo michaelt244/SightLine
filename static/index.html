@@ -1034,6 +1034,7 @@
     const CAPTURE_MS = 5000;
 
     // ─── DOM ───────────────────────────────────────────────
+    const convaiEl       = document.querySelector('elevenlabs-convai');
     const video          = document.getElementById('video');
     const screenEl       = document.getElementById('screen');
     const phoneEl        = document.getElementById('phone');
@@ -1165,11 +1166,14 @@
     function addLogEntry({ timestamp, type, engine, text, latency_ms }) {
       const level = getDangerLevel(text, type);
 
-      // Update latest description box
+      // Update latest description box + feed scene context to ElevenLabs agent
       if (type === 'description') {
         latestDescEl.className       = `latest-desc ${level}`;
         latestDescText.className     = 'latest-desc-text';
         latestDescText.textContent   = text;
+        if (convaiEl && text) {
+          convaiEl.setAttribute('dynamic-variables', JSON.stringify({ scene: text }));
+        }
       }
 
       // Side effects
@@ -1318,7 +1322,6 @@
     const btnAuto   = document.getElementById('btn-auto');
     const btnVoice  = document.getElementById('btn-voice');
     const voiceHint = document.getElementById('voice-hint');
-    const convaiEl  = document.querySelector('elevenlabs-convai');
 
     let voiceMode = false;
 

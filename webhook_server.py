@@ -13,8 +13,8 @@ from fastapi.responses import JSONResponse
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-# vLLM runs on the same machine, so we call localhost
-AMD_ENDPOINT = "http://localhost:8000/v1/chat/completions"
+# AMD GPU machine running vLLM
+AMD_ENDPOINT = "http://165.245.140.111:8000/v1/chat/completions"
 AMD_MODEL    = "llava-hf/llava-v1.6-mistral-7b-hf"
 AMD_TIMEOUT  = 15.0
 
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
     print()
     print("  SightLine Webhook Server")
-    print(f"  Vision model    : http://localhost:8000")
+    print(f"  Vision model    : {AMD_ENDPOINT}")
     print(f"  Gemini fallback : {'enabled' if GEMINI_API_KEY else 'DISABLED (GEMINI_API_KEY not set)'}")
     print()
     print("  Laptop uploads frames to:  POST http://165.245.140.111:8081/upload-frame")

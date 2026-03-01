@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Set
 
+import httpx
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -41,6 +42,7 @@ _last_spoken_at:  float          = 0.0
 _speech_queue:    queue.Queue    = queue.Queue()
 start_time = time.time()
 
+AMD_WEBHOOK_URL      = "http://165.245.140.111:8081/upload-frame"
 SPEECH_DEBOUNCE_SECS = 2.0
 HAZARD_WORDS = frozenset({
     'car', 'vehicle', 'stairs', 'step', 'edge', 'ledge', 'hole',
@@ -221,6 +223,15 @@ async def process_frame(b64: str):
         enqueue_speech(description, priority=is_hazard)
 
 
+async def _forward_frame_to_webhook(b64: str):
+    """Fire-and-forget: keep the AMD webhook server fed with the latest frame."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(AMD_WEBHOOK_URL, json={"frame": b64})
+    except Exception:
+        pass  # AMD machine offline — silent, don't break the main flow
+
+
 app = FastAPI(title="SightLine", version="3.0")
 
 app.add_middleware(
@@ -247,6 +258,7 @@ async def upload_frame(request: Request):
         return JSONResponse({"ok": False, "error": "missing 'frame' field"}, status_code=400)
     latest_frame_b64 = frame
     asyncio.create_task(process_frame(frame))
+    asyncio.create_task(_forward_frame_to_webhook(frame))
     return JSONResponse({"ok": True})
 
 
