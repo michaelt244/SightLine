@@ -3,7 +3,6 @@
 import argparse
 import asyncio
 import json
-import os
 import sys
 import time
 from collections import deque
@@ -15,17 +14,13 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
 
+from app.core.config import Settings
 from app.services.tts_service import TTSService
 from app.services.vision_service import VisionService
 from app.vision.vision import PROMPTS
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-
-GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-WEBHOOK_UPLOAD_URL = os.getenv("WEBHOOK_UPLOAD_URL", "").strip()
+settings = Settings.from_env()
 
 latest_frame_b64: str            = ""
 log_entries:      deque          = deque(maxlen=100)
@@ -51,7 +46,7 @@ state = {
 }
 
 args = None
-vision_service = VisionService(gemini_api_key=GEMINI_API_KEY)
+vision_service = VisionService(gemini_api_key=settings.gemini_api_key)
 tts_service: TTSService | None = None
 
 
@@ -195,7 +190,7 @@ async def get_status():
 @app.get("/api/config")
 async def get_config():
     return JSONResponse({
-        "webhook_upload_url": WEBHOOK_UPLOAD_URL or None,
+        "webhook_upload_url": settings.webhook_upload_url or None,
     })
 
 
@@ -256,22 +251,22 @@ def main():
     global args, tts_service
 
     parser = argparse.ArgumentParser(description="SightLine — vision server")
-    parser.add_argument("--engine", choices=["amd", "gemini"], default="amd",
+    parser.add_argument("--engine", choices=["amd", "gemini"], default=settings.default_engine,
                         help="Vision backend (default: amd, auto-falls back to gemini)")
-    parser.add_argument("--voice",  choices=["mac", "elevenlabs", "none"], default="mac",
+    parser.add_argument("--voice",  choices=["mac", "elevenlabs", "none"], default=settings.default_voice,
                         help="TTS backend: mac = system say, elevenlabs = ElevenLabs API")
-    parser.add_argument("--focus",  choices=["general", "ocr", "navigation", "safety"], default="general",
+    parser.add_argument("--focus",  choices=["general", "ocr", "navigation", "safety"], default=settings.default_focus,
                         help="Initial focus mode")
-    parser.add_argument("--port",   type=int, default=8080,
+    parser.add_argument("--port",   type=int, default=settings.default_port,
                         help="Port to listen on (default: 8080)")
     args = parser.parse_args()
 
     state["focus_mode"] = args.focus
 
-    if args.voice == "elevenlabs" and not ELEVENLABS_API_KEY:
+    if args.voice == "elevenlabs" and not settings.elevenlabs_api_key:
         print("[ERROR] ELEVENLABS_API_KEY not set")
         sys.exit(1)
-    tts_service = TTSService(voice=args.voice, elevenlabs_api_key=ELEVENLABS_API_KEY or "")
+    tts_service = TTSService(voice=args.voice, elevenlabs_api_key=settings.elevenlabs_api_key)
 
     print()
     print("  ███████╗██╗ ██████╗ ██╗  ██╗████████╗██╗     ██╗███╗   ██╗███████╗")

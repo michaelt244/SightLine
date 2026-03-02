@@ -2,11 +2,11 @@
 
 import argparse
 import json
-import os
 import sys
 
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-AGENT_ID           = "agent_7901kjkkm9jpesna15bwehhwtjr6"
+from app.core.config import Settings
+
+settings = Settings.from_env()
 
 DESCRIBE_TOOL_DEFINITION = {
     "type": "webhook",
@@ -78,8 +78,8 @@ def print_curl(webhook_url: str):
     body = {"tools": build_tools(webhook_url)}
     print()
     print(f"curl -s -X PATCH \\")
-    print(f"  https://api.elevenlabs.io/v1/convai/agents/{AGENT_ID} \\")
-    print(f"  -H 'xi-api-key: {ELEVENLABS_API_KEY }' \\")
+    print(f"  https://api.elevenlabs.io/v1/convai/agents/{settings.elevenlabs_agent_id} \\")
+    print("  -H 'xi-api-key: $ELEVENLABS_API_KEY' \\")
     print(f"  -H 'Content-Type: application/json' \\")
     print(f"  -d '{json.dumps(body)}'")
     print()
@@ -88,9 +88,9 @@ def print_curl(webhook_url: str):
 def register_via_sdk(webhook_url: str) -> bool:
     try:
         from elevenlabs.client import ElevenLabs
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        client.conversational_ai.agents.update(agent_id=AGENT_ID, tools=build_tools(webhook_url))
-        print(f"✅ Registered on agent {AGENT_ID}")
+        client = ElevenLabs(api_key=settings.elevenlabs_api_key)
+        client.conversational_ai.agents.update(agent_id=settings.elevenlabs_agent_id, tools=build_tools(webhook_url))
+        print(f"✅ Registered on agent {settings.elevenlabs_agent_id}")
         return True
     except AttributeError:
         return False  # SDK version doesn't expose this method
@@ -103,13 +103,13 @@ def register_via_rest(webhook_url: str) -> bool:
     import httpx
 
     resp = httpx.patch(
-        f"https://api.elevenlabs.io/v1/convai/agents/{AGENT_ID}",
-        headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+        f"https://api.elevenlabs.io/v1/convai/agents/{settings.elevenlabs_agent_id}",
+        headers={"xi-api-key": settings.elevenlabs_api_key, "Content-Type": "application/json"},
         json={"tools": build_tools(webhook_url)},
         timeout=15.0,
     )
     if resp.status_code in (200, 204):
-        print(f"Registered on agent {AGENT_ID}")
+        print(f"Registered on agent {settings.elevenlabs_agent_id}")
         return True
     print(f"API returned {resp.status_code}: {resp.text}")
     return False
@@ -124,7 +124,7 @@ def main():
     parser.add_argument("--print-curl",  action="store_true", help="Print the equivalent curl command")
     args = parser.parse_args()
 
-    if not ELEVENLABS_API_KEY:
+    if not settings.elevenlabs_api_key:
         print("[ERROR] ELEVENLABS_API_KEY not set")
         sys.exit(1)
 
@@ -139,7 +139,7 @@ def main():
         print("  Or print curl:      python setup_agent_tool.py --print-curl")
         sys.exit(1)
 
-    print(f"Registering on agent {AGENT_ID}...")
+    print(f"Registering on agent {settings.elevenlabs_agent_id}...")
     print(f"Webhook: {args.webhook_url}\n")
 
     if not register_via_sdk(args.webhook_url):

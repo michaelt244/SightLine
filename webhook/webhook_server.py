@@ -3,19 +3,18 @@
 import asyncio
 import base64
 import io
-import os
 import re
 import time
 from typing import Optional
 
 import httpx
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+from app.core.config import Settings
+
+settings = Settings.from_env()
 
 # vLLM runs on the same machine, so we call localhost
 AMD_ENDPOINT = "http://165.245.140.111:8000/v1/chat/completions"
@@ -160,10 +159,10 @@ def _call_gemini(b64: str, prompt: str) -> str:
     from google.genai import types
     from PIL import Image
 
-    if not GEMINI_API_KEY:
+    if not settings.gemini_api_key:
         raise RuntimeError("Gemini fallback unavailable: GEMINI_API_KEY is not set")
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=settings.gemini_api_key)
     image  = Image.open(io.BytesIO(base64.b64decode(b64)))
     response = client.models.generate_content(
         model="models/gemini-2.5-flash",
@@ -274,14 +273,17 @@ if __name__ == "__main__":
     print()
     print("  SightLine Webhook Server")
     print(f"  Vision model    : http://localhost:8000")
-    print(f"  Gemini fallback : {'enabled' if GEMINI_API_KEY else 'DISABLED (GEMINI_API_KEY not set)'}")
+    print(
+        "  Gemini fallback : "
+        f"{'enabled' if settings.gemini_api_key else 'DISABLED (GEMINI_API_KEY not set)'}"
+    )
     print()
     print("  Laptop uploads frames to:  POST http://165.245.140.111:8081/upload-frame")
     print("  ElevenLabs calls:          POST http://<ngrok-url>/tools/describe_scene")
     print("  Control endpoint:          POST http://<ngrok-url>/tools/control")
     print()
 
-    if not GEMINI_API_KEY:
+    if not settings.gemini_api_key:
         print("Set GEMINI_API_KEY for fallback:  export GEMINI_API_KEY='...'")
         print()
 
