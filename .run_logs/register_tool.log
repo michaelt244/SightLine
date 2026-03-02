@@ -1,0 +1,11 @@
+Registering on agent agent_7901kjkkm9jpesna15bwehhwtjr6...
+Webhook: https://presacrificial-irmgard-goodheartedly.ngrok-free.dev/tools/describe_scene
+
+(Trying REST API...)
+Registered on agent agent_7901kjkkm9jpesna15bwehhwtjr6
+
+Next steps:
+  python capture/run_sightline.py   (start capturing)
+  python webhook_server.py           (start webhook on 8081)
+  ngrok http 8081                    (expose publicly)
+

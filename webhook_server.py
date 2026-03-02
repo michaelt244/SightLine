@@ -18,7 +18,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # vLLM runs on the same machine, so we call localhost
-AMD_ENDPOINT = "http://localhost:8000/v1/chat/completions"
+AMD_ENDPOINT = "http://165.245.140.111:8000/v1/chat/completions"
 AMD_MODEL    = "llava-hf/llava-v1.6-mistral-7b-hf"
 AMD_TIMEOUT  = 15.0
 
@@ -29,21 +29,21 @@ sightline_active:   bool            = True
 PROMPTS = {
     "general": (
         "You are a vision assistant for a blind person. "
-        "Describe what you see in 1-2 sentences, max 20 words. "
-        "Safety hazards FIRST. Use spatial language: left, right, ahead. "
+        "Describe what you see in 2 short sentences, target 20-35 words. "
+        "Safety hazards FIRST. Use spatial language: left, right, ahead, and distance if possible. "
         "Never say 'I can see'."
     ),
     "ocr": (
         "Read ALL text visible in the image. Signs, labels, menus. "
-        "Read exactly as written. One sentence."
+        "Read exactly as written. Include complete lines where possible."
     ),
     "safety": (
         "Focus ONLY on safety for a blind person: vehicles, stairs, ledges, obstacles. "
-        "If nothing dangerous say 'Path looks clear.'"
+        "If nothing dangerous, say path looks clear and mention the nearest non-hazard object."
     ),
     "navigation": (
         "Navigation info for a blind person: clear path? Obstacles? Stairs? Doors? "
-        "Use clock directions. One sentence."
+        "Use clock directions and approximate distance. Use 1-2 short sentences."
     ),
 }
 
@@ -200,6 +200,10 @@ async def _run_vision(b64: str, prompt: str) -> str:
             raise RuntimeError(f"Both vision backends failed (AMD: {e}; Gemini: {ge})") from ge
 
 
+def _too_short(text: str, min_words: int = 8) -> bool:
+    return len((text or "").split()) < min_words
+
+
 @app.post("/tools/control")
 async def control(request: Request):
     body = await request.json()
@@ -239,6 +243,12 @@ async def handle_describe_scene(request: Request):
 
     try:
         description = await _run_vision(_latest_frame_b64, PROMPTS[mode])
+        if _too_short(description):
+            longer_prompt = (
+                f"{PROMPTS[mode]} "
+                "Your previous answer was too short. Return a fuller response with at least 14 words."
+            )
+            description = await _run_vision(_latest_frame_b64, longer_prompt)
     except Exception as e:
         print(f"[WEBHOOK] describe_scene failed: {e}")
         return JSONResponse({

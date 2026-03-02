@@ -1,0 +1,127 @@
+INFO:     Started server process [57520]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8081 (Press CTRL+C to quit)
+
+  SightLine Webhook Server
+  Vision model    : http://localhost:8000
+  Gemini fallback : enabled
+
+  Laptop uploads frames to:  POST http://165.245.140.111:8081/upload-frame
+  ElevenLabs calls:          POST http://<ngrok-url>/tools/describe_scene
+  Control endpoint:          POST http://<ngrok-url>/tools/control
+
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image displays a computer screen with a user interface for audio loopback settings. The interface is organized into sections such as "Devices," "Loopback Audio," and "Output Channels." There are options for Google Chrome, Visual Studio Code, and WhatsApp, with sliders and checkboxes to adjust settings. The screen also shows a visual representation of audio connections, with arrows indicating the flow of audio between different applications and devices.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image displays a user interface, likely a screenshot of a computer operating system. It shows a window with a menu titled "Loopback Audio" on the left side. The menu lists options such as "Google Chrome," "Visual Studio Code," and "WhatsApp." There are two channels labeled "On" and "Off" with a green and red color code, respectively. A flowchart with arrows connecting different options is visible, suggesting a process or workflow. The overall layout
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=safety → Based on the image provided, it appears to be a screenshot of a user interface, possibly from a smartphone or a computer application. The interface is showing a Loopback Audio device, which is a software application that allows users to create virtual audio devices on their computer.
+
+From a safety perspective for a blind person, the image does not provide direct information about the environment or potential hazards. However, I can describe the elements visible in the screenshot:
+
+1. **
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "OPTIONS /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The room appears to be a classroom with desks and chairs. There are safety hazards visible, including a person standing in the middle of the room. Additionally, there is a red button on the bottom right corner of the screen.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image shows a person sitting in a chair. The chair is positioned in the center of the frame. The person is wearing dark pants and a light-colored shirt. There is a safety hazard visible in the image; the chair is placed on a surface with a hole in the middle, which could pose a tripping hazard. The person's feet are not visible, so it is not possible to determine their position relative to the hole.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=navigation → The image shows an indoor setting, likely a classroom or lecture hall. There is a clear path to the front of the room, with no obstacles visible. The room has a whiteboard, a clock on the wall, and a window. There are no stairs or doors visible in this image. The chairs are arranged in rows, facing the front of the room. The distance to the front of the room appears to be about 10-15 feet.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image shows a person's leg and foot in the foreground, with a wall and a door in the background. The person is wearing dark shorts and sandals. There are no safety hazards visible in the image.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image shows a hallway with a person walking away from the camera. There is a clock visible on the wall to the right. The hallway appears to be well-lit and there are no immediate safety hazards visible in the image.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image shows a room with a glass partition. On the left, there is a door with a sign above it. A person is standing near the door, and there are papers posted on the wall. On the right, there is a person sitting at a desk with a computer monitor. The room appears to be an office or a classroom. There are no immediate safety hazards visible in the image.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+[WEBHOOK] mode=general → The image shows a blurred view of a room, with a person standing in the background. The room appears to be a living space, with a clock visible on the wall. The focus of the image is on a large, blurred object in the foreground, which could be a piece of furniture or an item of interest. There are no obvious safety hazards visible in the image.
+INFO:     34.59.11.47:0 - "POST /tools/describe_scene HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "OPTIONS /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
+INFO:     129.210.115.231:0 - "POST /upload-frame HTTP/1.1" 200 OK
