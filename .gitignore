@@ -1,5 +1,7 @@
 # Secrets — NEVER commit these
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -19,6 +21,11 @@ capture/frames/
 *.jpeg
 *.png
 
+# Runtime logs/state
+.run_logs/
+.run_pids/
+*.log
+
 # macOS
 .DS_Store
 
@@ -27,4 +34,3 @@ capture/frames/
 .idea/
 *.swp
 .claude
-

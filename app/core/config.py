@@ -26,6 +26,11 @@ class Settings:
     default_voice: str = "mac"
     default_focus: str = "general"
     default_port: int = 8080
+    amd_base_url: str = "http://127.0.0.1:8000"
+    amd_model: str = "llava-hf/llava-v1.6-mistral-7b-hf"
+    amd_timeout_seconds: float = 15.0
+    webhook_port: int = 8081
+    webhook_public_base_url: str = ""
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -44,6 +49,18 @@ class Settings:
         default_focus = os.environ.get("SIGHTLINE_FOCUS", "general").strip() or "general"
         if default_focus not in {"general", "ocr", "navigation", "safety"}:
             default_focus = "general"
+        amd_base_url = os.environ.get("AMD_BASE_URL", "http://127.0.0.1:8000").strip() or "http://127.0.0.1:8000"
+        amd_model = os.environ.get("AMD_MODEL", "llava-hf/llava-v1.6-mistral-7b-hf").strip() or "llava-hf/llava-v1.6-mistral-7b-hf"
+        amd_timeout_raw = os.environ.get("AMD_TIMEOUT_SECONDS", "15").strip() or "15"
+        try:
+            amd_timeout = float(amd_timeout_raw)
+        except ValueError:
+            amd_timeout = 15.0
+        webhook_port_raw = os.environ.get("WEBHOOK_PORT", "8081").strip() or "8081"
+        try:
+            webhook_port = int(webhook_port_raw)
+        except ValueError:
+            webhook_port = 8081
         return cls(
             gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
             elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
@@ -55,4 +72,9 @@ class Settings:
             default_voice=default_voice,
             default_focus=default_focus,
             default_port=default_port,
+            amd_base_url=amd_base_url.rstrip("/"),
+            amd_model=amd_model,
+            amd_timeout_seconds=amd_timeout,
+            webhook_port=webhook_port,
+            webhook_public_base_url=os.environ.get("WEBHOOK_PUBLIC_BASE_URL", "").strip().rstrip("/"),
         )

@@ -78,21 +78,21 @@ wait_for_ngrok_url() {
 start_stack() {
   require_file "$VENV_PY"
   require_file "$ENV_FILE"
-  require_file "$ROOT_DIR/webhook_server.py"
-  require_file "$ROOT_DIR/server.py"
-  require_file "$ROOT_DIR/setup_agent_tool.py"
+  require_file "$ROOT_DIR/webhook/webhook_server.py"
+  require_file "$ROOT_DIR/app/main.py"
+  require_file "$ROOT_DIR/scripts/setup_agent_tool.py"
 
   echo "Stopping old processes..."
   stop_pid_file "$WEBHOOK_PID_FILE"
   stop_pid_file "$NGROK_PID_FILE"
   stop_pid_file "$SERVER_PID_FILE"
-  pkill -f "python webhook_server.py" 2>/dev/null || true
-  pkill -f "python server.py" 2>/dev/null || true
+  pkill -f "python .*webhook/webhook_server.py" 2>/dev/null || true
+  pkill -f "python .*app/main.py" 2>/dev/null || true
   pkill -f "ngrok http 8081" 2>/dev/null || true
 
   echo "Starting webhook server on :8081..."
   load_env
-  nohup "$VENV_PY" "$ROOT_DIR/webhook_server.py" > "$LOG_DIR/webhook.log" 2>&1 &
+  nohup "$VENV_PY" "$ROOT_DIR/webhook/webhook_server.py" > "$LOG_DIR/webhook.log" 2>&1 &
   echo $! > "$WEBHOOK_PID_FILE"
 
   echo "Starting ngrok on :8081..."
@@ -115,10 +115,10 @@ start_stack() {
   load_env
 
   echo "Registering ElevenLabs tool..."
-  "$VENV_PY" "$ROOT_DIR/setup_agent_tool.py" --webhook-url "$tool_url" > "$LOG_DIR/register_tool.log" 2>&1 || true
+  "$VENV_PY" "$ROOT_DIR/scripts/setup_agent_tool.py" --webhook-url "$tool_url" > "$LOG_DIR/register_tool.log" 2>&1 || true
 
   echo "Starting app server on :8080 (engine: amd)..."
-  nohup "$VENV_PY" "$ROOT_DIR/server.py" --engine amd --voice elevenlabs > "$LOG_DIR/server.log" 2>&1 &
+  nohup "$VENV_PY" "$ROOT_DIR/app/main.py" --engine amd --voice elevenlabs > "$LOG_DIR/server.log" 2>&1 &
   echo $! > "$SERVER_PID_FILE"
 
   echo
@@ -138,8 +138,8 @@ stop_stack() {
   stop_pid_file "$SERVER_PID_FILE"
   stop_pid_file "$WEBHOOK_PID_FILE"
   stop_pid_file "$NGROK_PID_FILE"
-  pkill -f "python server.py" 2>/dev/null || true
-  pkill -f "python webhook_server.py" 2>/dev/null || true
+  pkill -f "python .*app/main.py" 2>/dev/null || true
+  pkill -f "python .*webhook/webhook_server.py" 2>/dev/null || true
   pkill -f "ngrok http 8081" 2>/dev/null || true
   echo "Stopped."
 }

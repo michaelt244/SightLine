@@ -119,7 +119,7 @@ def main():
     parser = argparse.ArgumentParser(description="Register describe_scene on the SightLine ElevenLabs agent")
     parser.add_argument(
         "--webhook-url",
-        help="Public webhook URL base or describe endpoint (e.g. https://abc.ngrok-free.app/tools/describe_scene)",
+        help="Public webhook URL base or describe endpoint (e.g. https://your-public-host/tools/describe_scene)",
     )
     parser.add_argument("--print-curl",  action="store_true", help="Print the equivalent curl command")
     args = parser.parse_args()
@@ -133,7 +133,7 @@ def main():
         return
 
     if not args.webhook_url:
-        print("Usage: python setup_agent_tool.py --webhook-url https://<ngrok-id>.ngrok-free.app/tools/describe_scene")
+        print("Usage: python scripts/setup_agent_tool.py --webhook-url https://<public-host>/tools/describe_scene")
         print()
         print("  Start ngrok first:  ngrok http 8081")
         print("  Or print curl:      python setup_agent_tool.py --print-curl")

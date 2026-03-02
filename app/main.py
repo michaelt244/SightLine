@@ -46,7 +46,12 @@ state = {
 }
 
 args = None
-vision_service = VisionService(gemini_api_key=settings.gemini_api_key)
+vision_service = VisionService(
+    gemini_api_key=settings.gemini_api_key,
+    amd_base_url=settings.amd_base_url,
+    amd_model=settings.amd_model,
+    amd_timeout_seconds=settings.amd_timeout_seconds,
+)
 tts_service: TTSService | None = None
 
 

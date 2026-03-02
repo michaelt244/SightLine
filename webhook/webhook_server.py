@@ -16,10 +16,9 @@ from app.core.config import Settings
 
 settings = Settings.from_env()
 
-# vLLM runs on the same machine, so we call localhost
-AMD_ENDPOINT = "http://165.245.140.111:8000/v1/chat/completions"
-AMD_MODEL    = "llava-hf/llava-v1.6-mistral-7b-hf"
-AMD_TIMEOUT  = 15.0
+AMD_ENDPOINT = f"{settings.amd_base_url}/v1/chat/completions"
+AMD_MODEL = settings.amd_model
+AMD_TIMEOUT = settings.amd_timeout_seconds
 
 _latest_frame_b64:  Optional[str]   = None
 _latest_frame_time: Optional[float] = None
@@ -272,19 +271,24 @@ if __name__ == "__main__":
 
     print()
     print("  SightLine Webhook Server")
-    print(f"  Vision model    : http://localhost:8000")
+    print(f"  Vision model    : {settings.amd_base_url}")
     print(
         "  Gemini fallback : "
         f"{'enabled' if settings.gemini_api_key else 'DISABLED (GEMINI_API_KEY not set)'}"
     )
     print()
-    print("  Laptop uploads frames to:  POST http://165.245.140.111:8081/upload-frame")
-    print("  ElevenLabs calls:          POST http://<ngrok-url>/tools/describe_scene")
-    print("  Control endpoint:          POST http://<ngrok-url>/tools/control")
+    if settings.webhook_public_base_url:
+        print(f"  Laptop uploads frames to:  POST {settings.webhook_public_base_url}/upload-frame")
+        print(f"  ElevenLabs calls:          POST {settings.webhook_public_base_url}/tools/describe_scene")
+        print(f"  Control endpoint:          POST {settings.webhook_public_base_url}/tools/control")
+    else:
+        print(f"  Local upload endpoint:     POST http://127.0.0.1:{settings.webhook_port}/upload-frame")
+        print("  ElevenLabs calls:          POST https://<your-ngrok-url>/tools/describe_scene")
+        print("  Control endpoint:          POST https://<your-ngrok-url>/tools/control")
     print()
 
     if not settings.gemini_api_key:
         print("Set GEMINI_API_KEY for fallback:  export GEMINI_API_KEY='...'")
         print()
 
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=settings.webhook_port)

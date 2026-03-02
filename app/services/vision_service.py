@@ -4,8 +4,18 @@ from app.vision.vision import PROMPTS, is_black_frame, is_similar
 
 
 class VisionService:
-    def __init__(self, gemini_api_key: str):
-        self.amd_engine = AmdLlavaEngine()
+    def __init__(
+        self,
+        gemini_api_key: str,
+        amd_base_url: str = "http://127.0.0.1:8000",
+        amd_model: str = "llava-hf/llava-v1.6-mistral-7b-hf",
+        amd_timeout_seconds: float = 15.0,
+    ):
+        self.amd_engine = AmdLlavaEngine(
+            base_url=amd_base_url,
+            model=amd_model,
+            timeout_seconds=amd_timeout_seconds,
+        )
         self.gemini_engine = GeminiFlashEngine(api_key=gemini_api_key) if gemini_api_key else None
 
     def amd_available(self) -> bool:
@@ -49,4 +59,3 @@ class VisionService:
             used_engine = self.gemini_engine.name
 
         return description, used_engine, fallback_remaining
-

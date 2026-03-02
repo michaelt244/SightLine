@@ -29,7 +29,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # add GEMINI_API_KEY, ELEVENLABS_API_KEY
 # Optional for ElevenLabs scene tool context:
-# WEBHOOK_UPLOAD_URL=http://165.245.140.111:8081/upload-frame
+# WEBHOOK_UPLOAD_URL=https://<public-webhook-host>/upload-frame
 ```
 
 ## Run
@@ -58,7 +58,7 @@ ngrok http 8081                 # expose publicly
 python setup_agent_tool.py --webhook-url https://<ngrok-id>.ngrok-free.app/tools/describe_scene
 
 # On laptop/server machine (same place you run server.py):
-export WEBHOOK_UPLOAD_URL=http://165.245.140.111:8081/upload-frame
+export WEBHOOK_UPLOAD_URL=https://<public-webhook-host>/upload-frame
 python server.py
 ```
 
