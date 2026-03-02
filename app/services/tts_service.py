@@ -2,9 +2,12 @@ import queue
 import threading
 import time
 
+from app.core.logger import get_logger
 from app.tts.base import TTSEngine
 from app.tts.elevenlabs import ElevenLabsEngine
 from app.tts.mac_say import MacSayEngine
+
+logger = get_logger("sightline.tts_service")
 
 
 class _SilentEngine(TTSEngine):
@@ -51,7 +54,10 @@ class TTSService:
                 self._engine.speak(text)
                 self._last_spoken_at = time.time()
             except Exception as e:
-                print(f"[TTS ERROR] {e}")
+                logger.error(
+                    "Speech synthesis failed",
+                    extra={"event": "tts_error", "context": {"error_type": e.__class__.__name__}},
+                )
             finally:
                 self._queue.task_done()
 
@@ -72,4 +78,3 @@ class TTSService:
                 self._queue.task_done()
             except queue.Empty:
                 break
-

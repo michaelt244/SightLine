@@ -5,8 +5,11 @@ import json
 import sys
 
 from app.core.config import Settings
+from app.core.logger import configure_logging, get_logger
 
 settings = Settings.from_env()
+configure_logging()
+logger = get_logger("sightline.setup_agent_tool")
 
 DESCRIBE_TOOL_DEFINITION = {
     "type": "webhook",
@@ -76,13 +79,14 @@ def build_tools(webhook_url: str):
 
 def print_curl(webhook_url: str):
     body = {"tools": build_tools(webhook_url)}
-    print()
-    print(f"curl -s -X PATCH \\")
-    print(f"  https://api.elevenlabs.io/v1/convai/agents/{settings.elevenlabs_agent_id} \\")
-    print("  -H 'xi-api-key: $ELEVENLABS_API_KEY' \\")
-    print(f"  -H 'Content-Type: application/json' \\")
-    print(f"  -d '{json.dumps(body)}'")
-    print()
+    curl_cmd = (
+        "curl -s -X PATCH "
+        f"https://api.elevenlabs.io/v1/convai/agents/{settings.elevenlabs_agent_id} "
+        "-H 'xi-api-key: $ELEVENLABS_API_KEY' "
+        "-H 'Content-Type: application/json' "
+        f"-d '{json.dumps(body)}'"
+    )
+    logger.info("Equivalent curl command", extra={"event": "agent_tool_curl", "context": {"command": curl_cmd}})
 
 
 def register_via_sdk(webhook_url: str) -> bool:
@@ -90,12 +94,18 @@ def register_via_sdk(webhook_url: str) -> bool:
         from elevenlabs.client import ElevenLabs
         client = ElevenLabs(api_key=settings.elevenlabs_api_key)
         client.conversational_ai.agents.update(agent_id=settings.elevenlabs_agent_id, tools=build_tools(webhook_url))
-        print(f"✅ Registered on agent {settings.elevenlabs_agent_id}")
+        logger.info(
+            "Registered tools via SDK",
+            extra={"event": "agent_tools_registered_sdk", "context": {"agent_id": settings.elevenlabs_agent_id}},
+        )
         return True
     except AttributeError:
         return False  # SDK version doesn't expose this method
     except Exception as e:
-        print(f"SDK error: {e}")
+        logger.error(
+            "SDK registration failed",
+            extra={"event": "agent_tools_sdk_error", "context": {"error_type": e.__class__.__name__}},
+        )
         return False
 
 
@@ -109,9 +119,15 @@ def register_via_rest(webhook_url: str) -> bool:
         timeout=15.0,
     )
     if resp.status_code in (200, 204):
-        print(f"Registered on agent {settings.elevenlabs_agent_id}")
+        logger.info(
+            "Registered tools via REST",
+            extra={"event": "agent_tools_registered_rest", "context": {"agent_id": settings.elevenlabs_agent_id}},
+        )
         return True
-    print(f"API returned {resp.status_code}: {resp.text}")
+    logger.error(
+        "REST registration failed",
+        extra={"event": "agent_tools_rest_error", "context": {"status_code": resp.status_code}},
+    )
     return False
 
 
@@ -125,7 +141,7 @@ def main():
     args = parser.parse_args()
 
     if not settings.elevenlabs_api_key:
-        print("[ERROR] ELEVENLABS_API_KEY not set")
+        logger.error("ELEVENLABS_API_KEY not set", extra={"event": "config_error"})
         sys.exit(1)
 
     if args.print_curl:
@@ -133,34 +149,50 @@ def main():
         return
 
     if not args.webhook_url:
-        print("Usage: python scripts/setup_agent_tool.py --webhook-url https://<public-host>/tools/describe_scene")
-        print()
-        print("  Start ngrok first:  ngrok http 8081")
-        print("  Or print curl:      python setup_agent_tool.py --print-curl")
+        logger.error(
+            "Missing required argument --webhook-url",
+            extra={"event": "usage_error", "context": {"example": "https://<public-host>/tools/describe_scene"}},
+        )
         sys.exit(1)
 
-    print(f"Registering on agent {settings.elevenlabs_agent_id}...")
-    print(f"Webhook: {args.webhook_url}\n")
+    logger.info(
+        "Registering agent tools",
+        extra={
+            "event": "agent_tool_registration_start",
+            "context": {"agent_id": settings.elevenlabs_agent_id, "webhook_url": args.webhook_url},
+        },
+    )
 
     if not register_via_sdk(args.webhook_url):
-        print("(Trying REST API...)")
+        logger.info("Trying REST API fallback", extra={"event": "agent_tool_rest_fallback"})
         if not register_via_rest(args.webhook_url):
-            print()
-            print("Manual fallback — add in ElevenLabs dashboard:")
             tools = build_tools(args.webhook_url)
-            print("  Agents → Your Agent → Tools → Add Tool → Webhook (add both)")
-            print(f"  Name: describe_scene    |  URL: {tools[0]['api']['url']}  |  Method: POST")
-            print(f"  Name: control_sightline |  URL: {tools[1]['api']['url']}  |  Method: POST")
-            print()
+            logger.error(
+                "Automatic registration failed; manual dashboard setup required",
+                extra={
+                    "event": "agent_tool_manual_fallback",
+                    "context": {
+                        "describe_url": tools[0]["api"]["url"],
+                        "control_url": tools[1]["api"]["url"],
+                    },
+                },
+            )
             print_curl(args.webhook_url)
             sys.exit(1)
 
-    print()
-    print("Next steps:")
-    print("  python capture/run_sightline.py   (start capturing)")
-    print("  python webhook_server.py           (start webhook on 8081)")
-    print("  ngrok http 8081                    (expose publicly)")
-    print()
+    logger.info(
+        "Registration completed",
+        extra={
+            "event": "agent_tool_registration_complete",
+            "context": {
+                "next_steps": [
+                    "python capture/run_sightline.py",
+                    "python webhook/webhook_server.py",
+                    "ngrok http 8081",
+                ]
+            },
+        },
+    )
 
 
 if __name__ == "__main__":

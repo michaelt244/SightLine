@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import sys
 import time
 from collections import deque
@@ -16,11 +17,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import Settings
+from app.core.logger import configure_logging, get_logger
 from app.services.tts_service import TTSService
 from app.services.vision_service import VisionService
 from app.vision.vision import PROMPTS
 
 settings = Settings.from_env()
+configure_logging(logging.INFO)
+logger = get_logger("sightline.main")
 
 latest_frame_b64: str            = ""
 log_entries:      deque          = deque(maxlen=100)
@@ -99,19 +103,32 @@ async def process_frame(b64: str):
 
         if description == "SKIP":
             state["consecutive_skips"] += 1
-            print(f"[{used_engine}] SKIP ({latency_ms}ms) [silent×{state['consecutive_skips']}]")
+            logger.info(
+                "Frame skipped by model",
+                extra={"event": "vision_skip", "context": {"engine": used_engine, "latency_ms": latency_ms}},
+            )
             return
 
         force_speak = state["consecutive_skips"] >= 3
         if vision_service.is_similar(state["last_description"], description) and not force_speak:
             state["consecutive_skips"] += 1
-            print(f"[{used_engine}] Similar — skipping ({latency_ms}ms) [silent×{state['consecutive_skips']}]")
+            logger.info(
+                "Frame skipped as similar",
+                extra={"event": "vision_similar_skip", "context": {"engine": used_engine, "latency_ms": latency_ms}},
+            )
             return
 
-        if force_speak:
-            print(f"[{used_engine}] (forced after {state['consecutive_skips']} skips) {description} ({latency_ms}ms)")
-        else:
-            print(f"[{used_engine}] {description} ({latency_ms}ms)")
+        logger.info(
+            "Vision description generated",
+            extra={
+                "event": "vision_description",
+                "context": {
+                    "engine": used_engine,
+                    "latency_ms": latency_ms,
+                    "forced": force_speak,
+                },
+            },
+        )
 
         state["consecutive_skips"] = 0
         state["last_description"]  = description
@@ -133,10 +150,13 @@ async def process_frame(b64: str):
         now = time.time()
         last_spoken_at = tts_service.last_spoken_at if tts_service else 0.0
         if not is_hazard and not force_speak and (now - last_spoken_at < SPEECH_DEBOUNCE_SECS):
-            print(f"[VOICE] Debounced ({now - last_spoken_at:.1f}s since last)")
+            logger.info(
+                "Voice debounced",
+                extra={"event": "voice_debounced", "context": {"seconds_since_last": round(now - last_spoken_at, 2)}},
+            )
             return
 
-        print(f"[VOICE] Enqueuing: {description}")
+        logger.info("Queued speech output", extra={"event": "voice_enqueue", "context": {"priority": is_hazard}})
         if tts_service:
             tts_service.enqueue(description, priority=is_hazard)
 
@@ -155,7 +175,7 @@ app.add_middleware(
 async def startup_event():
     if tts_service:
         tts_service.start()
-        print("[TTS] Speech queue worker started")
+        logger.info("Speech queue worker started", extra={"event": "tts_started"})
 
 
 @app.post("/upload-frame")
@@ -206,7 +226,7 @@ async def set_mode(request: Request):
     if mode not in PROMPTS:
         return JSONResponse({"ok": False, "error": f"Unknown mode: {mode}"}, status_code=400)
     state["focus_mode"] = mode
-    print(f"[MODE] {mode}")
+    logger.info("Focus mode changed", extra={"event": "focus_mode_changed", "context": {"mode": mode}})
     return JSONResponse({"ok": True, "mode": mode})
 
 
@@ -217,7 +237,7 @@ async def pause_auto():
     if tts_service:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, tts_service.pause)
-    print("[AUTO] Paused — voice command mode")
+    logger.info("Auto mode paused", extra={"event": "auto_paused"})
     return JSONResponse({"ok": True, "active": False})
 
 
@@ -225,7 +245,7 @@ async def pause_auto():
 async def resume_auto():
     global _auto_active
     _auto_active = True
-    print("[AUTO] Resumed — auto detect mode")
+    logger.info("Auto mode resumed", extra={"event": "auto_resumed"})
     return JSONResponse({"ok": True, "active": True})
 
 
@@ -269,33 +289,36 @@ def main():
     state["focus_mode"] = args.focus
 
     if args.voice == "elevenlabs" and not settings.elevenlabs_api_key:
-        print("[ERROR] ELEVENLABS_API_KEY not set")
+        logger.error("ELEVENLABS_API_KEY not set for elevenlabs voice", extra={"event": "config_error"})
         sys.exit(1)
     tts_service = TTSService(voice=args.voice, elevenlabs_api_key=settings.elevenlabs_api_key)
 
-    print()
-    print("  ███████╗██╗ ██████╗ ██╗  ██╗████████╗██╗     ██╗███╗   ██╗███████╗")
-    print("  ██╔════╝██║██╔════╝ ██║  ██║╚══██╔══╝██║     ██║████╗  ██║██╔════╝")
-    print("  ███████╗██║██║  ███╗███████║   ██║   ██║     ██║██╔██╗ ██║█████╗  ")
-    print("  ╚════██║██║██║   ██║██╔══██║   ██║   ██║     ██║██║╚██╗██║██╔══╝  ")
-    print("  ███████║██║╚██████╔╝██║  ██║   ██║   ███████╗██║██║ ╚████║███████╗")
-    print("  ╚══════╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝")
-    print()
-    print(f"  Engine: {args.engine.upper()}  |  Voice: {args.voice}  |  Focus: {args.focus}  |  Port: {args.port}")
-    print()
+    logger.info(
+        "SightLine server starting",
+        extra={
+            "event": "server_start",
+            "context": {"engine": args.engine, "voice": args.voice, "focus": args.focus, "port": args.port},
+        },
+    )
 
     if args.engine == "amd":
         if vision_service.amd_available():
-            print("  AMD Cloud connected — LLaVA on AMD Instinct GPU")
+            logger.info("AMD backend reachable", extra={"event": "amd_connected"})
         else:
-            print("  AMD unreachable — will fall back to Gemini per request")
+            logger.warning("AMD backend unreachable, fallback enabled", extra={"event": "amd_unreachable"})
             state["fallback_remaining"] = 3
 
-    print()
-    print(f"  Dashboard → http://localhost:{args.port}/")
-    print(f"  Logs      → GET  http://localhost:{args.port}/api/logs")
-    print(f"  WebSocket → ws://localhost:{args.port}/ws/live")
-    print()
+    logger.info(
+        "Runtime endpoints ready",
+        extra={
+            "event": "runtime_endpoints",
+            "context": {
+                "dashboard_url": f"http://localhost:{args.port}/",
+                "logs_url": f"http://localhost:{args.port}/api/logs",
+                "ws_url": f"ws://localhost:{args.port}/ws/live",
+            },
+        },
+    )
 
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")

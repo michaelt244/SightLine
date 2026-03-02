@@ -13,8 +13,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import Settings
+from app.core.logger import configure_logging, get_logger
 
 settings = Settings.from_env()
+configure_logging()
+logger = get_logger("sightline.webhook")
 
 AMD_ENDPOINT = f"{settings.amd_base_url}/v1/chat/completions"
 AMD_MODEL = settings.amd_model
@@ -113,11 +116,11 @@ def _apply_control(command: str, source: str) -> str:
     global sightline_active
     if command == "off":
         sightline_active = False
-        print(f"[CONTROL:{source}] SightLine paused")
+        logger.info("SightLine paused", extra={"event": "control_pause", "context": {"source": source}})
         return "SightLine paused"
     if command == "on":
         sightline_active = True
-        print(f"[CONTROL:{source}] SightLine resumed")
+        logger.info("SightLine resumed", extra={"event": "control_resume", "context": {"source": source}})
         return "SightLine resumed"
     return f"Unknown command: {command}"
 
@@ -189,13 +192,13 @@ def _call_gemini(b64: str, prompt: str) -> str:
 async def _run_vision(b64: str, prompt: str) -> str:
     try:
         return await _call_amd(b64, prompt)
-    except Exception as e:
-        print(f"AMD failed ({e}), falling back to Gemini...")
+    except Exception:
+        logger.warning("AMD failed, falling back to Gemini", extra={"event": "webhook_amd_fallback"})
         loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(None, _call_gemini, b64, prompt)
         except Exception as ge:
-            raise RuntimeError(f"Both vision backends failed (AMD: {e}; Gemini: {ge})") from ge
+            raise RuntimeError("Both vision backends failed") from ge
 
 
 def _too_short(text: str, min_words: int = 8) -> bool:
@@ -248,11 +251,14 @@ async def handle_describe_scene(request: Request):
             )
             description = await _run_vision(_latest_frame_b64, longer_prompt)
     except Exception as e:
-        print(f"[WEBHOOK] describe_scene failed: {e}")
+        logger.error(
+            "describe_scene failed",
+            extra={"event": "describe_scene_failed", "context": {"error_type": e.__class__.__name__}},
+        )
         return JSONResponse({
             "result": "Vision backend is temporarily unavailable. Please try again in a moment."
         })
-    print(f"[WEBHOOK] mode={mode} → {description}")
+    logger.info("Scene described", extra={"event": "scene_described", "context": {"mode": mode}})
     return JSONResponse({"result": description})
 
 
@@ -269,26 +275,32 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    print()
-    print("  SightLine Webhook Server")
-    print(f"  Vision model    : {settings.amd_base_url}")
-    print(
-        "  Gemini fallback : "
-        f"{'enabled' if settings.gemini_api_key else 'DISABLED (GEMINI_API_KEY not set)'}"
+    logger.info(
+        "SightLine webhook starting",
+        extra={
+            "event": "webhook_start",
+            "context": {
+                "vision_model_url": settings.amd_base_url,
+                "gemini_fallback_enabled": bool(settings.gemini_api_key),
+                "port": settings.webhook_port,
+            },
+        },
     )
-    print()
     if settings.webhook_public_base_url:
-        print(f"  Laptop uploads frames to:  POST {settings.webhook_public_base_url}/upload-frame")
-        print(f"  ElevenLabs calls:          POST {settings.webhook_public_base_url}/tools/describe_scene")
-        print(f"  Control endpoint:          POST {settings.webhook_public_base_url}/tools/control")
+        logger.info(
+            "Webhook public endpoints configured",
+            extra={
+                "event": "webhook_public_endpoints",
+                "context": {"public_base_url": settings.webhook_public_base_url},
+            },
+        )
     else:
-        print(f"  Local upload endpoint:     POST http://127.0.0.1:{settings.webhook_port}/upload-frame")
-        print("  ElevenLabs calls:          POST https://<your-ngrok-url>/tools/describe_scene")
-        print("  Control endpoint:          POST https://<your-ngrok-url>/tools/control")
-    print()
+        logger.info(
+            "Webhook running without public base URL",
+            extra={"event": "webhook_public_base_missing"},
+        )
 
     if not settings.gemini_api_key:
-        print("Set GEMINI_API_KEY for fallback:  export GEMINI_API_KEY='...'")
-        print()
+        logger.warning("GEMINI_API_KEY not set for webhook fallback", extra={"event": "gemini_key_missing"})
 
     uvicorn.run(app, host="0.0.0.0", port=settings.webhook_port)

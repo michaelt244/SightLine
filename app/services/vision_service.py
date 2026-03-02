@@ -1,6 +1,9 @@
 from app.vision.amd_llava import AmdLlavaEngine
 from app.vision.gemini_flash import GeminiFlashEngine
 from app.vision.vision import PROMPTS, is_black_frame, is_similar
+from app.core.logger import get_logger
+
+logger = get_logger("sightline.vision_service")
 
 
 class VisionService:
@@ -45,8 +48,8 @@ class VisionService:
             try:
                 description = self.amd_engine.describe(frame_b64, prompt)
                 used_engine = self.amd_engine.name
-            except Exception as e:
-                print(f"AMD failed ({e}), falling back to Gemini...")
+            except Exception:
+                logger.warning("AMD failed, falling back to Gemini", extra={"event": "amd_fallback"})
                 fallback_remaining = 3
                 use_gemini = True
 
