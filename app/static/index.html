@@ -1029,7 +1029,8 @@
 
   <script>
     // ─── Config ────────────────────────────────────────────
-    const API_BASE   = 'http://localhost:8080';
+    const API_BASE   = new URLSearchParams(window.location.search).get('api')
+      || `${window.location.protocol}//${window.location.host}`;
     const WS_URL     = API_BASE.replace(/^http/, 'ws') + '/ws/live';
     const CAPTURE_MS = 5000;
 
@@ -1072,6 +1073,9 @@
     let speakTimer      = null;
     let bannerTimer     = null;
     let captureInterval = null;
+    let webhookUploadUrl = null;
+    let webhookUploadWarningShown = false;
+    let micChecked = false;
     const startTime     = Date.now();
 
     const FRAMING = { zoom: 1.18, x: 50, y: 58 };
@@ -1220,6 +1224,20 @@
       streamMeta.textContent = connected ? `Connected · ${API_BASE}` : 'Waiting for backend...';
     }
 
+    async function loadRuntimeConfig() {
+      try {
+        const resp = await fetch(`${API_BASE}/api/config`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (typeof data.webhook_upload_url === 'string' && data.webhook_upload_url.trim()) {
+          webhookUploadUrl = data.webhook_upload_url.trim();
+          localLog(`Webhook frame forwarding enabled`);
+        }
+      } catch {
+        // Continue with local-only uploads if config endpoint is unavailable.
+      }
+    }
+
     // ─── WebSocket ─────────────────────────────────────────
     function connectWS() {
       try {
@@ -1298,9 +1316,23 @@
       captureIndicatorEl.classList.add('sending');
       setTimeout(() => captureIndicatorEl.classList.remove('sending'), 400);
 
-      const ok = await postFrame(`${API_BASE}/upload-frame`, b64);
-      if (!ok) {
+      const targets = [`${API_BASE}/upload-frame`];
+      if (webhookUploadUrl) targets.push(webhookUploadUrl);
+
+      const results = await Promise.allSettled(targets.map(url => postFrame(url, b64)));
+      const localOk = results[0] && results[0].status === 'fulfilled' && results[0].value;
+      if (!localOk) {
         localLog('Frame upload failed — backend unreachable', 'error');
+        return;
+      }
+
+      if (webhookUploadUrl) {
+        const webhookOk = results[1] && results[1].status === 'fulfilled' && results[1].value;
+        if (!webhookOk && !webhookUploadWarningShown) {
+          webhookUploadWarningShown = true;
+          localLog('Webhook frame forwarding failed — voice agent may miss scene context', 'error');
+          showToast('Webhook frame forwarding failed', 'warn');
+        }
       }
     }
 
@@ -1325,6 +1357,42 @@
 
     let voiceMode = false;
 
+    function setVoiceUi(active) {
+      btnAuto.classList.toggle('active', !active);
+      btnVoice.classList.toggle('active', active);
+      btnVoice.classList.toggle('voice-active', active);
+      btnVoice.innerHTML = active
+        ? '<span class="voice-pulse-dot"></span>Voice Active'
+        : 'Voice Command';
+      voiceHint.classList.toggle('show', active);
+    }
+
+    async function ensureMicAccess() {
+      if (micChecked) return;
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        throw new Error('Microphone capture is not supported in this browser');
+      }
+      const host = window.location.hostname;
+      const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+      if (!window.isSecureContext && !isLocalhost) {
+        throw new Error('Microphone access requires HTTPS or localhost');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      micChecked = true;
+    }
+
+    async function waitForConvaiWidget(timeoutMs = 8000) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeoutMs) {
+        if (convaiEl && (typeof convaiEl.startSession === 'function' || convaiEl.shadowRoot)) {
+          return;
+        }
+        await new Promise(r => setTimeout(r, 200));
+      }
+      throw new Error('Voice widget did not finish loading');
+    }
+
     function stopConvaiCall() {
       try {
         if (convaiEl && typeof convaiEl.endSession === 'function') {
@@ -1336,49 +1404,55 @@
         if (convaiEl && convaiEl.shadowRoot) {
           const endBtn = convaiEl.shadowRoot.querySelector('[data-testid="end-call"]')
             || convaiEl.shadowRoot.querySelector('button[aria-label="End"]')
-            || [...convaiEl.shadowRoot.querySelectorAll('button')].find(b => b.textContent.includes('End'));
+            || [...convaiEl.shadowRoot.querySelectorAll('button')].find(b => /end|hang up|stop/i.test(b.textContent || ''));
           if (endBtn) endBtn.click();
         }
       } catch {}
     }
 
     async function startConvaiCall() {
-      // Try native API first
-      try {
-        if (convaiEl && typeof convaiEl.startSession === 'function') {
-          await convaiEl.startSession();
+      await waitForConvaiWidget();
+      if (convaiEl && typeof convaiEl.startSession === 'function') {
+        await convaiEl.startSession();
+        return;
+      }
+      if (convaiEl && convaiEl.shadowRoot) {
+        const startBtn = convaiEl.shadowRoot.querySelector('[data-testid="start-call"]')
+          || convaiEl.shadowRoot.querySelector('button[aria-label*="Start"]')
+          || convaiEl.shadowRoot.querySelector('button[aria-label*="Call"]')
+          || [...convaiEl.shadowRoot.querySelectorAll('button')].find(
+            b => /start|call|talk/i.test(b.textContent || '')
+          );
+        if (startBtn) {
+          startBtn.click();
           return;
         }
-      } catch {}
-      // Fall back: auto-click the widget's start button in shadow DOM
-      await new Promise(r => setTimeout(r, 500));
-      try {
-        if (convaiEl && convaiEl.shadowRoot) {
-          const btn = convaiEl.shadowRoot.querySelector('button');
-          if (btn) btn.click();
-        }
-      } catch {}
+      }
+      throw new Error('Could not start the ElevenLabs voice session');
     }
 
     async function enterVoiceMode() {
       if (voiceMode) return;
       voiceMode = true;
-      btnAuto.classList.remove('active');
-      btnVoice.classList.add('active', 'voice-active');
-      btnVoice.innerHTML = '<span class="voice-pulse-dot"></span>Voice Active';
-      voiceHint.classList.add('show');
+      setVoiceUi(true);
+      try { await ensureMicAccess(); } catch (e) {
+        localLog(`Mic: ${e.message}`, 'error');
+      }
       try { await fetch(`${API_BASE}/api/pause`, { method: 'POST' }); } catch {}
-      await startConvaiCall();
+      try {
+        await startConvaiCall();
+      } catch {
+        // Auto-click failed — widget still visible, user can click Start manually
+        localLog('Voice mode active — click Start in the widget to begin', 'system');
+        showToast('Click the Start button in the Voice Agent panel', 'warn');
+      }
       localLog('Voice command mode — auto paused');
     }
 
     async function exitVoiceMode() {
       if (!voiceMode) return;
       voiceMode = false;
-      btnVoice.classList.remove('active', 'voice-active');
-      btnVoice.textContent = 'Voice Command';
-      voiceHint.classList.remove('show');
-      btnAuto.classList.add('active');
+      setVoiceUi(false);
       stopConvaiCall();
       try { await fetch(`${API_BASE}/api/resume`, { method: 'POST' }); } catch {}
       localLog('Auto detect resumed');
@@ -1470,12 +1544,15 @@
     stopBtn.addEventListener('click', () => stopCurrentStream());
 
     // ─── Init ──────────────────────────────────────────────
-    applyFixedFraming();
-    setBackendStatus(false);
-    connectWS();
-    setInterval(pollStatus, 2000);
-    setInterval(pollLogs,   3000);
-    localLog('SightLine ready.');
+    (async function init() {
+      applyFixedFraming();
+      setBackendStatus(false);
+      connectWS();
+      setInterval(pollStatus, 2000);
+      setInterval(pollLogs,   3000);
+      await loadRuntimeConfig();
+      localLog('SightLine ready.');
+    })();
   </script>
 </body>
 </html>

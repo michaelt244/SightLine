@@ -6,62 +6,99 @@ A friend on a phone calls the blind user via video. The caregiver's phone screen
 
 ## Architecture
 
+```text
+Browser Dashboard (app/static/index.html)
+  -> Screen capture via getDisplayMedia()
+  -> POST /upload-frame (every ~3s)
+  -> WebSocket /ws/live (live events)
+
+FastAPI App (app/main.py)
+  -> app/services/vision_service.py
+      -> app/vision/amd_llava.py
+      -> app/vision/gemini_flash.py
+  -> app/services/tts_service.py
+      -> app/tts/mac_say.py
+      -> app/tts/elevenlabs.py
+  -> app/core/config.py (centralized settings)
+  -> app/core/logger.py (structured logging)
+
+Webhook Service (webhook/webhook_server.py)
+  -> /upload-frame
+  -> /tools/describe_scene
+  -> /tools/control
 ```
-Browser (static/index.html)
-  └─ getDisplayMedia() → canvas JPEG frames every 3s
-       ├─ POST /upload-frame  → server.py (local, port 8080)
-       └─ POST /upload-frame  → AMD webhook (port 8081, optional)
 
-server.py  (FastAPI, port 8080)
-  ├─ vision.py  → AMD LLaVA or Gemini Flash 2.0
-  ├─ TTS        → macOS say or ElevenLabs
-  ├─ WS /ws/live  → real-time log to dashboard
-  └─ GET /      → serves static/index.html
+## Repository Layout
 
-webhook_server.py  (AMD machine, port 8081)
-  └─ ElevenLabs conversational agent calls /tools/describe_scene
+```text
+app/
+  core/        # config + logging
+  services/    # orchestration layer
+  vision/      # vision engines + filters/prompts
+  tts/         # TTS engines
+  static/      # dashboard frontend
+  main.py      # FastAPI entrypoint
+webhook/       # webhook service for conversational agent tools
+scripts/       # operational scripts (tool registration, automation)
+tests/         # test suite
 ```
 
 ## Setup
 
 ```bash
-python -m venv venv && source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # add GEMINI_API_KEY, ELEVENLABS_API_KEY
+cp .env.example .env
 ```
 
-## Run
+Required environment variables in `.env`:
+
+- `GEMINI_API_KEY`
+- `ELEVENLABS_API_KEY` (required only for `--voice elevenlabs`)
+
+Common optional values:
+
+- `AMD_BASE_URL` (default `http://127.0.0.1:8000`)
+- `WEBHOOK_PUBLIC_BASE_URL`
+- `SIGHTLINE_ENGINE`, `SIGHTLINE_VOICE`, `SIGHTLINE_FOCUS`, `SIGHTLINE_PORT`
+
+## Running
+
+Main app:
 
 ```bash
-# Default: AMD vision, Mac TTS
-python server.py
-
-# Gemini only, ElevenLabs voice
-python server.py --engine gemini --voice elevenlabs
-
-# Options
-python server.py --engine amd|gemini --voice mac|elevenlabs|none --focus general|ocr|navigation|safety --port 8080
+python app/main.py
+python app/main.py --engine gemini --voice elevenlabs
+python app/main.py --engine amd --voice mac --focus safety --port 8080
 ```
 
 Open `http://localhost:8080/`, click **Start**, share the window.
 
-## AMD webhook (optional)
-
-Runs on the AMD Cloud machine alongside vLLM. Lets the ElevenLabs conversational agent answer spoken questions about the scene.
-
 ```bash
-# On AMD machine
-python webhook_server.py        # port 8081
-ngrok http 8081                 # expose publicly
-python setup_agent_tool.py --webhook-url https://<ngrok-id>.ngrok-free.app/tools/describe_scene
+python webhook/webhook_server.py
 ```
 
-## Files
+Register ElevenLabs tools:
 
-| File | Purpose |
-|------|---------|
-| `server.py` | FastAPI server, audio, WebSocket, static serving |
-| `vision.py` | AMD/Gemini vision, prompts, smart filtering |
-| `static/index.html` | Browser dashboard (frame capture + live log) |
-| `webhook_server.py` | AMD machine webhook for ElevenLabs agent |
-| `setup_agent_tool.py` | Register `describe_scene` tool on ElevenLabs agent |
+```bash
+python scripts/setup_agent_tool.py --webhook-url https://<public-host>/tools/describe_scene
+```
+
+## CLI Reference
+
+`python app/main.py [options]`
+
+- `--engine` : `amd | gemini`
+- `--voice` : `mac | elevenlabs | none`
+- `--focus` : `general | ocr | navigation | safety`
+- `--port` : FastAPI server port
+
+CLI arguments override `.env` defaults.
+
+## Responsible AI
+
+- Assistive, not autonomous: SightLine provides guidance, not final navigation decisions.
+- Safety-first prompting: outputs prioritize hazards and spatial context.
+- Human-in-the-loop design: intended for caregiver-assisted or user-verified operation.
+- Known limitations: model errors, latency spikes, and low-light scenes can reduce reliability.
